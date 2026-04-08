@@ -20,7 +20,7 @@ export async function createCliente(
   tenantSlug: string,
   payload: CreateClienteRequest,
 ): Promise<CreateClienteResponse> {
-  const res = await fetch(`/api/public/${tenantSlug}/clientes`, {
+  const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/clientes`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -114,11 +114,26 @@ interface LookupClienteApiResponse {
   } | null;
 }
 
+const API_BASE_URL = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  (import.meta.env.VITE_API_URL as string | undefined)
+)
+  ?.trim()
+  .replace(/\/+$/, "");
+
+function buildPublicApiUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export async function createOrder(
   tenantSlug: string,
   payload: CreateOrderRequest,
 ): Promise<CreateOrderResponse> {
-  const res = await fetch(`/api/public/${tenantSlug}/pedidos`, {
+  const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/pedidos`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -153,7 +168,7 @@ export async function lookupClienteByTelefono(
   });
 
   try {
-    const res = await fetch(`/api/public/${tenantSlug}/clientes/buscar?${params.toString()}`, {
+    const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/clientes/buscar?${params.toString()}`), {
       method: "GET",
     });
 

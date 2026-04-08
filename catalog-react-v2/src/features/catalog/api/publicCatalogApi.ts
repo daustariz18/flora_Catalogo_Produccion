@@ -55,6 +55,21 @@ export type PublicCatalogoResponse = {
   barrios: PublicBarrio[];
 };
 
+const API_BASE_URL = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  (import.meta.env.VITE_API_URL as string | undefined)
+)
+  ?.trim()
+  .replace(/\/+$/, "");
+
+function buildPublicApiUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 type PublicCatalogRawResponse =
   | PublicProducto[]
   | {
@@ -79,8 +94,7 @@ type PublicCatalogRawResponse =
     };
 
 export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCatalogoResponse> {
-  const endpoint = `/api/public/${encodeURIComponent(tenantSlug)}/catalogo`;
-  const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  const endpoint = buildPublicApiUrl(`/api/public/${encodeURIComponent(tenantSlug)}/catalogo`);
   let response: Response;
 
   try {
@@ -110,7 +124,7 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCata
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
-    if (import.meta.env.DEV && !baseUrl) {
+    if (import.meta.env.DEV && !API_BASE_URL) {
       return {
         empresa: null,
         categorias: [],

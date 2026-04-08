@@ -1,0 +1,9 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+
+# Leave API routes untouched so they reach backend/proxy config.
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]

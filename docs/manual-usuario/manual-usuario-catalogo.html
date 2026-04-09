@@ -124,7 +124,7 @@
         <form>
           <div style="margin-bottom: 12px;">
             <label for="indicativo">Indicativo:</label><br>
-            <select id="indicativo" name="indicativo" style="width: 180px;"></select>
+            <select id="indicativo" name="indicativo" style="width: 180px;" autocomplete="off"></select>
           </div>
           <div>
             <label for="telefono">Número de teléfono:</label><br>
@@ -134,12 +134,18 @@
         <script type="module">
           import { countryCodes } from './indicativos-paises.js';
           const select = document.getElementById('indicativo');
+          // Filtrar países de África y Asia (ya están excluidos en el archivo JS)
           countryCodes.forEach(({ code, name }) => {
             const option = document.createElement('option');
             option.value = code;
             option.textContent = `${code} - ${name}`;
             if(code === '+57') option.selected = true;
             select.appendChild(option);
+          });
+          // Evitar que el usuario escriba en el select (ya es solo seleccionable)
+          select.addEventListener('keydown', function(e) {
+            e.preventDefault();
+            return false;
           });
         </script>
       </section>

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { countryCodes } from "../../../shared/utils/countryCodes";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { formatCOP } from "../../../shared/utils/currency";
 import { createOrder, lookupClienteByTelefono, type CreateOrderRequest } from "../api/publicOrderApi";
-import { getCartTotalItems, type AvailableBarrio, type CartItem, type PedidoState, useCartStore } from "../store/cartStore";
+import { useCartStore } from "../store/cartStore";
+import type { PedidoState, AvailableBarrio } from "../store/cartStore";
 
-type WizardStep = 1 | 2 | 3;
+
+type WizardStep = 1 | 2 | 3 | 4;
 type PaymentMethod = "wompi" | "transferencia" | "efectivo";
 
 interface WizardStepsProps {
@@ -12,30 +15,31 @@ interface WizardStepsProps {
   stepTitles: string[];
 }
 
-interface ProductStepProps {
-  hasProducts: boolean;
-  catalogPath: string;
+interface CustomerStepProps {
   pedidoState: PedidoState;
-  totalItems: number;
-  onRequestClearCart: () => void;
-  decreaseQty: (productId: number) => void;
-  increaseQty: (productId: number) => void;
-  removeProduct: (productId: number) => void;
-  deliveryEstimate: number;
-  onNext: () => void;
-}
-
-interface CustomerDeliveryStepProps {
-  pedidoState: PedidoState;
-  availableBarrios: AvailableBarrio[];
-  canContinue: boolean;
   customerLookupStatus: "idle" | "loading" | "found" | "not_found" | "error";
   onLookupByPhone: (phone: string) => void;
   updateCliente: (field: "nombre" | "indicativo" | "telefono", value: string) => void;
   updateFacturacion: (field: "tipoIdentificacion" | "identificacion" | "email", value: string) => void;
+  canContinue: boolean;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+interface DeliveryStepProps {
+  pedidoState: PedidoState;
+  availableBarrios: AvailableBarrio[];
+  canContinue: boolean;
   updateEntrega: (field: keyof PedidoState["entrega"], value: string) => void;
   selectBarrio: (barrio: AvailableBarrio | null) => void;
-  updateMensaje: (field: "texto" | "firma", value: string) => void;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+interface MessageStepProps {
+  pedidoState: PedidoState;
+  canContinue: boolean;
+  updateMensaje: (field: keyof PedidoState["mensaje"], value: string) => void;
   updateNotas: (value: string) => void;
   onNext: () => void;
   onBack: () => void;
@@ -68,6 +72,12 @@ function getStepStatus(stepNumber: number, currentStep: WizardStep): "current" |
   return "upcoming";
 }
 
+function formatLocalDateISO(date: Date = new Date()): string {
+  const offsetMinutes = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offsetMinutes * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+
 function WizardSteps({ step, stepTitles }: Readonly<WizardStepsProps>) {
   const gridStyle = { "--wizard-columns": stepTitles.length } as CSSProperties;
 
@@ -92,107 +102,157 @@ function WizardSteps({ step, stepTitles }: Readonly<WizardStepsProps>) {
   );
 }
 
-function ProductStep({
-  hasProducts,
-  catalogPath,
+function CustomerStep({
   pedidoState,
-  totalItems,
-  onRequestClearCart,
-  decreaseQty,
-  increaseQty,
-  removeProduct,
-  deliveryEstimate,
-  onNext,
-}: Readonly<ProductStepProps>) {
-  const estimatedTotal = pedidoState.subtotal + deliveryEstimate;
-
-  return (
-    <section className="wizard-panel" aria-label="Seleccion de productos">
-      <div className="wizard-panel-head">
-        <div>
-          <h2>1. Revisa tus arreglos</h2>
-          <p>Ajusta cantidades o quita productos antes de continuar.</p>
-        </div>
-        <button type="button" className="ghost ghost-danger" onClick={onRequestClearCart} disabled={!hasProducts}>
-          Vaciar carrito
-        </button>
-      </div>
-
-      {hasProducts ? (
-        <>
-          <section className="cart-list" aria-label="Productos del carrito">
-            {pedidoState.productos.map((item) => (
-              <article key={item.id} className="cart-item">
-                <img src={item.imagen} alt={item.nombre} loading="lazy" />
-                <div className="cart-item-body">
-                  <h2>{item.nombre}</h2>
-                  <p>{formatCOP(item.precio)}</p>
-                  <div className="qty-controls">
-                    <button type="button" onClick={() => decreaseQty(item.id)} aria-label={`Restar ${item.nombre}`}>
-                      -
-                    </button>
-                    <span>{item.cantidad}</span>
-                    <button type="button" onClick={() => increaseQty(item.id)} aria-label={`Sumar ${item.nombre}`}>
-                      +
-                    </button>
-                  </div>
-                  <p className="cart-item-subtotal">
-                    Subtotal: <strong>{formatCOP(item.precio * item.cantidad)}</strong>
-                  </p>
-                </div>
-                <button type="button" className="remove-link" onClick={() => removeProduct(item.id)}>
-                  Quitar
-                </button>
-              </article>
-            ))}
-          </section>
-
-          <aside className="wizard-summary-card">
-            <p className="wizard-summary-row">
-              <span>{totalItems} producto(s)</span>
-              <strong>{formatCOP(pedidoState.subtotal)}</strong>
-            </p>
-            <p className="wizard-summary-row">
-              <span>Envio estimado</span>
-              <strong>{deliveryEstimate > 0 ? formatCOP(deliveryEstimate) : "Se define en entrega"}</strong>
-            </p>
-            <p className="wizard-summary-row wizard-summary-row-total">
-              <span>Total estimado</span>
-              <strong>{formatCOP(estimatedTotal)}</strong>
-            </p>
-            <button type="button" className="cta" onClick={onNext}>
-              Continuar
-            </button>
-          </aside>
-        </>
-      ) : (
-        <section className="empty-state wizard-empty-state">
-          <p>Tu carrito esta vacio por ahora.</p>
-          <Link to={catalogPath} className="cta empty-state-action">
-            Agregar mas flores
-          </Link>
-        </section>
-      )}
-    </section>
-  );
-}
-
-function CustomerDeliveryStep({
-  pedidoState,
-  availableBarrios,
-  canContinue,
   customerLookupStatus,
   onLookupByPhone,
   updateCliente,
   updateFacturacion,
-  updateEntrega,
-  selectBarrio,
-  updateMensaje,
-  updateNotas,
+  canContinue,
   onNext,
   onBack,
-}: Readonly<CustomerDeliveryStepProps>) {
+}: Readonly<CustomerStepProps>) {
   const facturacion = pedidoState.cliente.facturacion;
+  const clienteEncontrado = customerLookupStatus === "found";
+  const estadoCliente =
+    customerLookupStatus === "found"
+      ? "Cliente encontrado"
+      : customerLookupStatus === "loading"
+        ? "Buscando cliente"
+        : customerLookupStatus === "not_found"
+          ? "Nuevo cliente"
+          : customerLookupStatus === "error"
+            ? "Sin conexión"
+            : "Nuevo cliente";
+
+  return (
+    <section className="wizard-panel" aria-label="Informacion de contacto">
+      <div className="wizard-panel-head">
+        <div>
+          <h2>1. Información del cliente</h2>
+          <p>Confirmamos tu identidad y el correo donde se respaldará el pedido.</p>
+        </div>
+      </div>
+
+      <section className="checkout-card checkout-card-compact">
+        <div className="compact-card-head">
+          <h3>Información del cliente</h3>
+          <span className={`compact-badge ${clienteEncontrado ? "compact-badge-success" : "compact-badge-muted"}`}>
+            {estadoCliente}
+          </span>
+        </div>
+
+        <div className="compact-form-grid compact-form-grid-top">
+          <label className="checkout-field">
+            <span>Teléfono WhatsApp</span>
+            <div className="phone-input phone-input-compact">
+              <select
+                value={pedidoState.cliente.indicativo ?? "+57"}
+                onChange={(event) => updateCliente("indicativo", event.target.value)}
+                autoComplete="tel-country-code"
+              >
+                {countryCodes.map(({ code, name }) => (
+                  <option key={code + name} value={code} title={`${name} (${code})`}>
+                    {name} {code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                inputMode="tel"
+                value={pedidoState.cliente.telefono}
+                onChange={(event) => updateCliente("telefono", event.target.value)}
+                onBlur={(event) => onLookupByPhone(event.target.value)}
+                placeholder="3128896624"
+                autoComplete="tel"
+                required
+              />
+            </div>
+            {customerLookupStatus === "loading" ? <small className="checkout-field-help">Buscando cliente...</small> : null}
+            {customerLookupStatus === "found" ? (
+              <small className="checkout-field-help">Cliente encontrado. Datos autocompletados.</small>
+            ) : null}
+            {customerLookupStatus === "not_found" ? (
+              <small className="checkout-field-help">No encontramos cliente con ese teléfono.</small>
+            ) : null}
+            {customerLookupStatus === "error" ? (
+              <small className="checkout-field-help">No se pudo consultar el cliente en este momento.</small>
+            ) : null}
+          </label>
+
+          <label className="checkout-field">
+            <span>Nombre completo</span>
+            <input
+              type="text"
+              value={pedidoState.cliente.nombre}
+              onChange={(event) => updateCliente("nombre", event.target.value)}
+              placeholder="Diego Ustariz"
+              autoComplete="name"
+              required
+            />
+          </label>
+
+          <label className="checkout-field">
+            <span>Tipo de identificación</span>
+            <select
+              value={facturacion.tipoIdentificacion || "cedula"}
+              onChange={(event) =>
+                updateFacturacion("tipoIdentificacion", event.target.value as "cedula" | "nit" | "pasaporte" | "")
+              }
+            >
+              <option value="cedula">Cédula</option>
+              <option value="nit">NIT</option>
+              <option value="pasaporte">Pasaporte</option>
+            </select>
+          </label>
+
+          <label className="checkout-field">
+            <span>Identificación</span>
+            <input
+              type="text"
+              value={facturacion.identificacion}
+              onChange={(event) => updateFacturacion("identificacion", event.target.value)}
+              placeholder="1062397422"
+              inputMode="numeric"
+            />
+          </label>
+        </div>
+
+        <div className="compact-form-grid compact-form-grid-bottom">
+          <label className="checkout-field checkout-field-wide">
+            <span>Correo electrónico (opcional)</span>
+            <input
+              type="email"
+              value={facturacion.email}
+              onChange={(event) => updateFacturacion("email", event.target.value)}
+              placeholder="diusme@gmail.com"
+              autoComplete="email"
+            />
+          </label>
+        </div>
+      </section>
+
+      <div className="wizard-actions wizard-actions-sticky">
+        <button type="button" className="ghost wizard-action-secondary" onClick={onBack}>
+          Regresar
+        </button>
+        <button type="button" className="cta wizard-action-primary" onClick={onNext} disabled={!canContinue}>
+          Siguiente
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function DeliveryStep({
+  pedidoState,
+  availableBarrios,
+  canContinue,
+  updateEntrega,
+  selectBarrio,
+  onNext,
+  onBack,
+}: Readonly<DeliveryStepProps>) {
   const isDomicilio = pedidoState.entrega.metodo === "domicilio";
   const [barrioQuery, setBarrioQuery] = useState(pedidoState.entrega.barrio);
   const [showBarrioOptions, setShowBarrioOptions] = useState(false);
@@ -212,135 +272,92 @@ function CustomerDeliveryStep({
   }, [availableBarrios, barrioQuery]);
 
   return (
-    <section className="wizard-panel" aria-label="Informacion de contacto y entrega">
+    <section className="wizard-panel" aria-label="Informacion de entrega y mensaje">
       <div className="wizard-panel-head">
         <div>
-          <h2>2. Datos y entrega</h2>
-          <p>Te pedimos solo lo necesario para entregar tu pedido sin demoras.</p>
+          <h2>2. Información de entrega</h2>
+          <p>Organiza cómo recibirá el pedido y revisa la fecha de entrega.</p>
         </div>
       </div>
 
-      <section className="checkout-card">
-        <div className="checkout-section-head">
-          <h3>Contacto principal</h3>
-          <p>Usaremos estos datos para confirmar tu pedido por WhatsApp.</p>
+      <section className="checkout-card checkout-card-compact">
+        <div className="compact-card-head">
+          <h3>Información de entrega</h3>
         </div>
 
-        <label className="checkout-field">
-          <span>Nombre completo</span>
-          <input
-            type="text"
-            value={pedidoState.cliente.nombre}
-            onChange={(event) => updateCliente("nombre", event.target.value)}
-            placeholder="Escribe tu nombre"
-            autoComplete="name"
-            required
-          />
-        </label>
-
-        <label className="checkout-field">
-          <span>Indicativo</span>
-          <input
-            type="text"
-            value={pedidoState.cliente.indicativo ?? ""}
-            onChange={(event) => updateCliente("indicativo", event.target.value)}
-            placeholder="+57"
-            autoComplete="tel-country-code"
-            required
-          />
-        </label>
-
-        <label className="checkout-field">
-          <span>Telefono</span>
-          <input
-            type="tel"
-            inputMode="tel"
-            value={pedidoState.cliente.telefono}
-            onChange={(event) => updateCliente("telefono", event.target.value)}
-            onBlur={(event) => onLookupByPhone(event.target.value)}
-            placeholder="3001234567"
-            autoComplete="tel"
-            required
-          />
-          {customerLookupStatus === "loading" ? <small className="checkout-field-help">Buscando cliente...</small> : null}
-          {customerLookupStatus === "found" ? (
-            <small className="checkout-field-help">Cliente encontrado. Datos autocompletados.</small>
-          ) : null}
-          {customerLookupStatus === "not_found" ? (
-            <small className="checkout-field-help">No encontramos cliente con ese telefono.</small>
-          ) : null}
-          {customerLookupStatus === "error" ? (
-            <small className="checkout-field-help">No se pudo consultar el cliente en este momento.</small>
-          ) : null}
-        </label>
-      </section>
-
-      <section className="checkout-card">
-        <div className="checkout-section-head">
-          <h3>Entrega</h3>
-          <p>Elige como quieres recibir tu pedido.</p>
-        </div>
-
-        <div className="delivery-options" role="radiogroup" aria-label="Metodo de entrega">
+        <div className="delivery-options delivery-options-compact" role="radiogroup" aria-label="Metodo de entrega">
           <button
             type="button"
-            className={`delivery-option ${isDomicilio ? "delivery-option-active" : ""}`}
+            className={`delivery-option delivery-option-compact ${isDomicilio ? "delivery-option-active" : ""}`}
             onClick={() => updateEntrega("metodo", "domicilio")}
             aria-pressed={isDomicilio}
           >
             <span>Domicilio</span>
-            <small>Lo enviamos a una direccion</small>
           </button>
           <button
             type="button"
-            className={`delivery-option ${pedidoState.entrega.metodo === "recoger" ? "delivery-option-active" : ""}`}
+            className={`delivery-option delivery-option-compact ${pedidoState.entrega.metodo === "recoger" ? "delivery-option-active" : ""}`}
             onClick={() => updateEntrega("metodo", "recoger")}
             aria-pressed={pedidoState.entrega.metodo === "recoger"}
           >
             <span>Recoger en tienda</span>
-            <small>Pasas por el punto de venta</small>
           </button>
         </div>
 
-        <div className="delivery-fields">
+        <div className="compact-form-grid compact-form-grid-delivery">
           <label className="checkout-field">
-            <span>{isDomicilio ? "Nombre de quien recibe" : "Nombre de quien recoge"}</span>
+            <span>Nombre del destinatario *</span>
             <input
               type="text"
               value={pedidoState.entrega.nombreDestinatario}
               onChange={(event) => updateEntrega("nombreDestinatario", event.target.value)}
-              placeholder="Nombre y apellido"
+              placeholder="Ej: Maria Perez"
               autoComplete="name"
               required
             />
           </label>
 
+          <label className="checkout-field">
+            <span>Teléfono destino</span>
+            <div className="phone-input phone-input-compact">
+              <span className="phone-prefix">+57</span>
+              <input
+                type="tel"
+                value={pedidoState.entrega.telefono}
+                onChange={(event) => updateEntrega("telefono", event.target.value)}
+                placeholder="3001234567"
+                autoComplete="tel"
+              />
+            </div>
+          </label>
+
           {isDomicilio ? (
             <>
               <label className="checkout-field">
-                <span>Direccion</span>
-                <textarea
+                <span>Dirección principal *</span>
+                <input
+                  type="text"
                   value={pedidoState.entrega.direccion}
                   onChange={(event) => updateEntrega("direccion", event.target.value)}
-                  placeholder="Calle, numero, apartamento, referencia"
-                  rows={3}
+                  placeholder="Ej: Calle 72 #45-32"
                   autoComplete="street-address"
                   required
                 />
               </label>
 
               <label className="checkout-field">
-                <span>Complemento (opcional)</span>
+                <span>Complemento de dirección</span>
                 <input
                   type="text"
                   value={pedidoState.entrega.complemento}
                   onChange={(event) => updateEntrega("complemento", event.target.value)}
-                  placeholder="Torre, apto, piso, interior"
+                  placeholder="Ej: Torre 2 Apto 502"
                 />
+                <small className="checkout-field-help">Apartamento, torre, casa u oficina</small>
               </label>
 
-              <label className="checkout-field">
-                <span>Barrio</span>
+              <label className="checkout-field checkout-field-wide">
+                <span>Barrio de entrega *</span>
                 <div className="barrio-combobox">
                   <input
                     type="text"
@@ -359,7 +376,7 @@ function CustomerDeliveryStep({
                       );
                       selectBarrio(exactMatch ?? null);
                     }}
-                    placeholder="Busca y selecciona un barrio"
+                    placeholder="Ej: Miramar"
                     autoComplete="off"
                   />
                   {showBarrioOptions && filteredBarrios.length > 0 ? (
@@ -385,145 +402,124 @@ function CustomerDeliveryStep({
                 </div>
                 <small className="checkout-field-help">
                   {pedidoState.entrega.costoDomicilio > 0
-                    ? `Envio para ${pedidoState.entrega.barrio}: ${formatCOP(pedidoState.entrega.costoDomicilio)}`
-                    : "Selecciona un barrio para calcular el costo de envio."}
+                    ? `Costo de domicilio: ${formatCOP(pedidoState.entrega.costoDomicilio)}`
+                    : "Costo de domicilio: $0"}
                 </small>
               </label>
             </>
           ) : null}
+        </div>
 
-          <section className="delivery-date-block" aria-label="Fecha de entrega">
-            <div className="delivery-date-head">
-              <strong>Momento de entrega</strong>
-              <p>Selecciona cuando quieres recibir o recoger tu pedido.</p>
-            </div>
+        <section className="delivery-date-block delivery-date-block-compact" aria-label="Fecha de entrega">
+          <div className="delivery-date-head">
+            <strong>Fecha de entrega *</strong>
+          </div>
 
-            <div className="delivery-date-grid" role="radiogroup" aria-label="Momento de entrega">
-              <button
-                type="button"
-                className={`delivery-date-button ${pedidoState.entrega.fecha === "hoy" ? "delivery-date-button-active" : ""}`}
-                onClick={() => {
-                  updateEntrega("fecha", "hoy");
-                  updateEntrega("fechaProgramada", "");
+          <div className="delivery-date-grid">
+            <label className="checkout-field">
+              <span>Fecha</span>
+              <input
+                type="date"
+                value={pedidoState.entrega.fechaProgramada || new Date().toISOString().slice(0, 10)}
+                onChange={(event) => {
+                  updateEntrega("fecha", "programada");
+                  updateEntrega("fechaProgramada", event.target.value);
                 }}
-                aria-pressed={pedidoState.entrega.fecha === "hoy"}
-              >
-                Hoy
-              </button>
-              <button
-                type="button"
-                className={`delivery-date-button ${pedidoState.entrega.fecha === "programada" ? "delivery-date-button-active" : ""}`}
-                onClick={() => updateEntrega("fecha", "programada")}
-                aria-pressed={pedidoState.entrega.fecha === "programada"}
-              >
-                Programar fecha
-              </button>
-            </div>
+                required
+              />
+            </label>
 
-            {pedidoState.entrega.fecha === "programada" ? (
-              <label className="checkout-field delivery-date-picker-field">
-                <span>Fecha programada</span>
-                <input
-                  type="date"
-                  value={pedidoState.entrega.fechaProgramada}
-                  onChange={(event) => updateEntrega("fechaProgramada", event.target.value)}
-                  required
-                />
-              </label>
-            ) : null}
-          </section>
-        </div>
-      </section>
-
-      <section className="checkout-card">
-        <div className="checkout-section-head">
-          <h3>Mensaje para la tarjeta (opcional)</h3>
-          <p>Puedes dejar un mensaje corto y firma.</p>
-        </div>
-
-        <label className="checkout-field">
-          <span>Mensaje</span>
-          <textarea
-            value={pedidoState.mensaje.texto}
-            onChange={(event) => updateMensaje("texto", event.target.value)}
-            placeholder="Escribe un mensaje breve"
-            rows={2}
-          />
-        </label>
-
-        <label className="checkout-field">
-          <span>Firma (opcional)</span>
-          <input
-            type="text"
-            value={pedidoState.mensaje.firma}
-            onChange={(event) => updateMensaje("firma", event.target.value)}
-            placeholder="De parte de..."
-          />
-        </label>
-
-        <label className="checkout-field">
-          <span>Notas del pedido (opcional)</span>
-          <textarea
-            value={pedidoState.notas}
-            onChange={(event) => updateNotas(event.target.value)}
-            placeholder="Indicaciones adicionales"
-            rows={2}
-          />
-        </label>
-      </section>
-
-      <section className="checkout-card">
-        <div className="checkout-section-head">
-          <h3>Datos de facturacion</h3>
-          <p>La factura se genera siempre. La identificacion es opcional.</p>
-        </div>
-
-        <div className="delivery-fields">
-          <label className="checkout-field">
-            <span>Tipo de identificacion (opcional)</span>
-            <select
-              value={facturacion.tipoIdentificacion}
-              onChange={(event) =>
-                updateFacturacion("tipoIdentificacion", event.target.value as "cedula" | "nit" | "pasaporte" | "")
-              }
-            >
-              <option value="">No especificar</option>
-              <option value="cedula">Cedula</option>
-              <option value="nit">NIT</option>
-              <option value="pasaporte">Pasaporte</option>
-            </select>
-          </label>
-
-          <label className="checkout-field">
-            <span>Identificacion</span>
-            <input
-              type="text"
-              value={facturacion.identificacion}
-              onChange={(event) => updateFacturacion("identificacion", event.target.value)}
-              placeholder="Numero de documento (opcional)"
-            />
-          </label>
-
-          <label className="checkout-field">
-            <span>Correo electronico</span>
-            <input
-              type="email"
-              value={facturacion.email}
-              onChange={(event) => updateFacturacion("email", event.target.value)}
-              placeholder="correo@ejemplo.com"
-              autoComplete="email"
-              required
-            />
-          </label>
-        </div>
+            <label className="checkout-field">
+              <span>Rango de hora (opcional)</span>
+              <select defaultValue="">
+                <option value="">Seleccione...</option>
+                <option value="Mañana (8am - 12pm)">Mañana (8am - 12pm)</option>
+                <option value="Tarde (2pm - 6pm)">Tarde (2pm - 6pm)</option>
+              </select>
+            </label>
+          </div>
+        </section>
       </section>
 
       <div className="wizard-actions wizard-actions-sticky">
-        <button type="button" className="ghost" onClick={onBack}>
+        <button type="button" className="ghost wizard-action-secondary" onClick={onBack}>
           Volver
         </button>
-        <button type="button" className="cta" onClick={onNext} disabled={!canContinue}>
+        <button type="button" className="cta wizard-action-primary" onClick={onNext} disabled={!canContinue}>
           Continuar
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MessageStep({
+  pedidoState,
+  canContinue,
+  updateMensaje,
+  updateNotas,
+  onNext,
+  onBack,
+}: Readonly<MessageStepProps>) {
+  return (
+    <section className="wizard-panel" aria-label="Mensaje del pedido">
+      <div className="wizard-panel-head">
+        <div>
+          <h2>3. Mensaje</h2>
+          <p>Escribe el mensaje de la tarjeta y las observaciones especiales del pedido.</p>
+        </div>
+      </div>
+
+      <section className="checkout-card checkout-card-compact checkout-card-message">
+        <div className="compact-card-head">
+          <h3>Mensaje para la tarjeta</h3>
+        </div>
+
+        <div className="message-card-grid">
+          <label className="checkout-field checkout-field-wide">
+            <textarea
+              className="checkout-textarea checkout-textarea-message"
+              value={pedidoState.mensaje.texto}
+              onChange={(event) => updateMensaje("texto", event.target.value)}
+              placeholder="Escribe tu mensaje aquí..."
+              rows={5}
+            />
+          </label>
+
+          <label className="checkout-field checkout-field-wide">
+            <span>Firma</span>
+            <input
+              type="text"
+              value={pedidoState.mensaje.firma}
+              onChange={(event) => updateMensaje("firma", event.target.value)}
+              placeholder="Ej: Con amor, tu familia"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="checkout-card checkout-card-compact checkout-card-message">
+        <div className="compact-card-head">
+          <h3>Observaciones Especiales</h3>
+        </div>
+
+        <label className="checkout-field checkout-field-wide">
+          <textarea
+            className="checkout-textarea checkout-textarea-notes"
+            value={pedidoState.notas}
+            onChange={(event) => updateNotas(event.target.value)}
+            placeholder="Notas adicionales para el pedido (opcional)."
+            rows={5}
+          />
+        </label>
+      </section>
+
+      <div className="wizard-actions wizard-actions-sticky">
+        <button type="button" className="ghost wizard-action-secondary" onClick={onBack}>
+          Anterior
+        </button>
+        <button type="button" className="cta wizard-action-primary" onClick={onNext} disabled={!canContinue}>
+          Siguiente
         </button>
       </div>
     </section>
@@ -555,7 +551,7 @@ function ConfirmationStep({
     <section className="wizard-panel" aria-label="Resumen final del pedido">
       <div className="wizard-panel-head">
         <div>
-          <h2>3. Confirmar pedido</h2>
+          <h2>4. Confirmar pedido</h2>
           <p>Revisa el resumen, elige tu forma de pago y confirma.</p>
         </div>
       </div>
@@ -627,6 +623,10 @@ function ConfirmationStep({
               <strong>
                 {pedidoState.entrega.fecha === "hoy" ? "Hoy" : `Programada: ${pedidoState.entrega.fechaProgramada}`}
               </strong>
+            </p>
+            <p>
+              <span>Mensaje</span>
+              <strong>{pedidoState.mensaje.texto || "Sin mensaje"}</strong>
             </p>
           </div>
         </aside>
@@ -743,36 +743,26 @@ export function CartPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
-  const [undoItem, setUndoItem] = useState<CartItem | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wompi");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [customerLookupStatus, setCustomerLookupStatus] = useState<"idle" | "loading" | "found" | "not_found" | "error">(
     "idle",
   );
   const pedidoState = useCartStore((state) => state.pedidoState);
-  const addItem = useCartStore((state) => state.addItem);
-  const increaseQty = useCartStore((state) => state.increaseQty);
-  const decreaseQty = useCartStore((state) => state.decreaseQty);
-  const removeProduct = useCartStore((state) => state.removeProduct);
-  const clearCart = useCartStore((state) => state.clearCart);
   const updateCliente = useCartStore((state) => state.updateCliente);
   const updateFacturacion = useCartStore((state) => state.updateFacturacion);
   const updateEntrega = useCartStore((state) => state.updateEntrega);
-  const selectBarrio = useCartStore((state) => state.selectBarrio);
   const updateMensaje = useCartStore((state) => state.updateMensaje);
   const updateNotas = useCartStore((state) => state.updateNotas);
+  const selectBarrio = useCartStore((state) => state.selectBarrio);
   const submitOrder = useCartStore((state) => state.submitOrder);
   const availableBarrios = useCartStore((state) => state.availableBarrios);
-  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPrefilledRecipientRef = useRef(false);
 
-  const totalItems = getCartTotalItems(pedidoState.productos);
   const costoDomicilio = pedidoState.entrega.metodo === "domicilio" ? pedidoState.entrega.costoDomicilio : 0;
   const catalogPath = `/catalogo/${tenantSlug}`;
   const successPath = `/catalogo/${tenantSlug}/pedido-exitoso`;
   const activeTenant = tenantSlug;
-  const deliveryEstimate = pedidoState.entrega.metodo === "domicilio" ? pedidoState.entrega.costoDomicilio : 0;
   const hasProducts = pedidoState.productos.length > 0;
   const safeIndicativo = (pedidoState.cliente.indicativo ?? "").trim();
   const aplicaIvaNit =
@@ -780,30 +770,22 @@ export function CartPage() {
   const totalIVA = aplicaIvaNit ? Math.round(pedidoState.subtotal * 0.19) : 0;
   const totalFinal = pedidoState.subtotal + costoDomicilio + totalIVA;
 
-  const canContinueStep2Base =
+  const canContinueStep1 =
     pedidoState.cliente.nombre.trim().length > 1 &&
     pedidoState.cliente.telefono.trim().length >= 7 &&
-    pedidoState.entrega.nombreDestinatario.trim().length > 1;
-  const canContinueStep2Billing = pedidoState.cliente.facturacion.email.trim().length > 4;
+    pedidoState.cliente.facturacion.identificacion.trim().length > 0;
+  const canContinueStep2Base = pedidoState.entrega.nombreDestinatario.trim().length > 1;
   const canContinueStep2Fecha =
     pedidoState.entrega.fecha === "hoy" || pedidoState.entrega.fechaProgramada.trim().length > 0;
   const canContinueStep2Address = pedidoState.entrega.metodo !== "domicilio" || pedidoState.entrega.direccion.trim().length > 5;
   const canContinueStep2Barrio =
     pedidoState.entrega.metodo !== "domicilio" ||
     (pedidoState.entrega.barrio.trim().length > 1 && pedidoState.entrega.costoDomicilio > 0);
-  const canContinueStep2 =
-    canContinueStep2Base && canContinueStep2Billing && canContinueStep2Fecha && canContinueStep2Address && canContinueStep2Barrio;
+  const canContinueStep2 = canContinueStep2Base && canContinueStep2Fecha && canContinueStep2Address && canContinueStep2Barrio;
+  const canContinueStep3 = true;
   const canFinalizeOrder = acceptedTerms;
 
-  const stepTitles = useMemo(() => ["Tu carrito", "Datos y entrega", "Confirmar"], []);
-
-  useEffect(() => {
-    return () => {
-      if (undoTimeoutRef.current) {
-        clearTimeout(undoTimeoutRef.current);
-      }
-    };
-  }, []);
+  const stepTitles = useMemo(() => ["Información del cliente", "Información de entrega", "Mensaje", "Confirmar"], []);
 
   useEffect(() => {
     if (!safeIndicativo) {
@@ -852,63 +834,11 @@ export function CartPage() {
   }, [hasProducts, step]);
 
   function goNext() {
-    setStep((current) => (current >= 3 ? 3 : ((current + 1) as WizardStep)));
+    setStep((current) => (current >= 4 ? 4 : ((current + 1) as WizardStep)));
   }
 
   function goBack() {
     setStep((current) => (current <= 1 ? 1 : ((current - 1) as WizardStep)));
-  }
-
-  function openClearCartConfirm() {
-    setShowClearCartConfirm(true);
-  }
-
-  function confirmClearCart() {
-    clearCart();
-    setShowClearCartConfirm(false);
-    setUndoItem(null);
-  }
-
-  function handleRemoveProduct(productId: number) {
-    const item = pedidoState.productos.find((product) => product.id === productId);
-
-    if (!item) {
-      return;
-    }
-
-    removeProduct(productId);
-    setUndoItem(item);
-
-    if (undoTimeoutRef.current) {
-      clearTimeout(undoTimeoutRef.current);
-    }
-
-    undoTimeoutRef.current = setTimeout(() => {
-      setUndoItem(null);
-      undoTimeoutRef.current = null;
-    }, 7000);
-  }
-
-  function undoRemoveProduct() {
-    if (!undoItem) {
-      return;
-    }
-
-    for (let i = 0; i < undoItem.cantidad; i += 1) {
-      addItem({
-        id: undoItem.id,
-        nombre: undoItem.nombre,
-        precio: undoItem.precio,
-        imagen: undoItem.imagen,
-      });
-    }
-
-    setUndoItem(null);
-
-    if (undoTimeoutRef.current) {
-      clearTimeout(undoTimeoutRef.current);
-      undoTimeoutRef.current = null;
-    }
   }
 
   async function handleLookupByPhone(phone: string) {
@@ -956,9 +886,33 @@ export function CartPage() {
   }
 
   async function handleConfirmOrder() {
+    if (!canContinueStep1) {
+      setStep(1);
+      setSubmitError("Completa los datos del cliente antes de confirmar el pedido.");
+      return;
+    }
+
+    if (!canContinueStep2) {
+      setStep(3);
+      setSubmitError("Completa los datos de entrega antes de confirmar el pedido.");
+      return;
+    }
+
     if (!canFinalizeOrder) {
       setSubmitError("Debes aceptar los terminos para confirmar el pedido.");
       return;
+    }
+
+    if (pedidoState.entrega.metodo === "domicilio") {
+      const hasDireccion = pedidoState.entrega.direccion.trim().length > 5;
+      const hasBarrio =
+        pedidoState.entrega.barrio.trim().length > 1 || Number.isFinite(pedidoState.entrega.barrioID ?? NaN);
+
+      if (!hasDireccion || !hasBarrio) {
+        setStep(2);
+        setSubmitError("Para envio a domicilio debes completar direccion y barrio antes de confirmar.");
+        return;
+      }
     }
 
     setSubmitError(null);
@@ -974,6 +928,7 @@ export function CartPage() {
       const telefonoLimpio = pedidoState.cliente.telefono.trim();
       const indicativo = safeIndicativo || "+57";
       const telefonoCompleto = telefonoLimpio ? `${indicativo}${telefonoLimpio}` : "";
+      const telefonoDestinatario = pedidoState.entrega.telefono.trim() || telefonoLimpio;
       const email = pedidoState.cliente.facturacion.email.trim();
 
       if (!fallbackIdentificacion) {
@@ -991,8 +946,8 @@ export function CartPage() {
         totalNeto: totalFinal,
         fechaPedido:
           pedidoState.entrega.fecha === "programada" && pedidoState.entrega.fechaProgramada.trim()
-            ? `${pedidoState.entrega.fechaProgramada}T00:00:00`
-            : undefined,
+            ? pedidoState.entrega.fechaProgramada.trim()
+            : formatLocalDateISO(),
         version: paymentMethod === "efectivo" ? 2 : 1,
         metodoPago: paymentMethod,
         metodo_pago: paymentMethod,
@@ -1019,11 +974,50 @@ export function CartPage() {
           : facturaEsPasaporte
             ? { pasaporte: fallbackIdentificacion, passport: fallbackIdentificacion }
             : { cedula: fallbackIdentificacion }),
+
+        // DATOS DE ENVÍO (ENTREGA)
+        metodoEntrega: pedidoState.entrega.metodo,
+        metodo_entrega: pedidoState.entrega.metodo,
+        nombreDestinatario: pedidoState.entrega.nombreDestinatario,
+        nombre_destinatario: pedidoState.entrega.nombreDestinatario,
+        telefonoDestinatario: telefonoDestinatario,
+        telefono_destinatario: telefonoDestinatario,
+        direccionEntrega: pedidoState.entrega.direccion,
+        direccion_entrega: pedidoState.entrega.direccion,
+        complementoEntrega: pedidoState.entrega.complemento,
+        complemento_entrega: pedidoState.entrega.complemento,
+        barrioEntrega: pedidoState.entrega.barrio,
+        barrio_entrega: pedidoState.entrega.barrio,
+        barrioEntregaID: pedidoState.entrega.barrioID,
+        barrio_entrega_id: pedidoState.entrega.barrioID,
+        barrio_id: pedidoState.entrega.barrioID,
+        id_barrio: pedidoState.entrega.barrioID,
+        nombre_barrio: pedidoState.entrega.barrio,
+        barrio_nombre: pedidoState.entrega.barrio,
+        costoDomicilio: pedidoState.entrega.costoDomicilio,
+        costo_domicilio: pedidoState.entrega.costoDomicilio,
+        fechaEntrega:
+          pedidoState.entrega.fecha === "programada" && pedidoState.entrega.fechaProgramada.trim()
+            ? pedidoState.entrega.fechaProgramada.trim()
+            : formatLocalDateISO(),
+        fecha_entrega:
+          pedidoState.entrega.fecha === "programada" && pedidoState.entrega.fechaProgramada.trim()
+            ? pedidoState.entrega.fechaProgramada.trim()
+            : formatLocalDateISO(),
+        fechaProgramada:
+          pedidoState.entrega.fecha === "programada" ? pedidoState.entrega.fechaProgramada.trim() : "",
+        fecha_programada:
+          pedidoState.entrega.fecha === "programada" ? pedidoState.entrega.fechaProgramada.trim() : "",
+
+        // MENSAJE Y NOTAS
+        mensaje: pedidoState.mensaje.texto,
+        mensaje_tarjeta: pedidoState.mensaje.texto,
+        firma: pedidoState.mensaje.firma,
+        firma_tarjeta: pedidoState.mensaje.firma,
+        notas: pedidoState.notas,
       };
 
-      if (import.meta.env.DEV) {
-        console.info("[checkout] Payload /pedidos", orderPayload);
-      }
+      console.info("[checkout] Payload /pedidos", orderPayload);
 
       const response = await createOrder(activeTenant, orderPayload);
 
@@ -1047,7 +1041,7 @@ export function CartPage() {
     <main className="cart-page wizard-page">
       <header className="cart-header wizard-header">
         <div>
-          <p className="wizard-kicker">{`Paso ${step} de 3`}</p>
+          <p className="wizard-kicker">{`Paso ${step} de 4`}</p>
           <h1>Revisa y confirma tu pedido</h1>
         </div>
         <Link to={catalogPath} className="back-link back-link-muted">
@@ -1055,34 +1049,46 @@ export function CartPage() {
         </Link>
       </header>
 
-      <WizardSteps step={step} stepTitles={stepTitles} />
+      {hasProducts ? null : (
+        <section className="empty-state wizard-empty-state">
+          <p>Tu carrito esta vacio por ahora.</p>
+          <Link to={catalogPath} className="cta empty-state-action">
+            Agregar mas flores
+          </Link>
+        </section>
+      )}
 
-      {step === 1 ? (
-        <ProductStep
-          hasProducts={hasProducts}
-          catalogPath={catalogPath}
-          pedidoState={pedidoState}
-          totalItems={totalItems}
-          onRequestClearCart={openClearCartConfirm}
-          decreaseQty={decreaseQty}
-          increaseQty={increaseQty}
-          removeProduct={handleRemoveProduct}
-          deliveryEstimate={deliveryEstimate}
-          onNext={goNext}
-        />
-      ) : null}
+      {hasProducts ? <WizardSteps step={step} stepTitles={stepTitles} /> : null}
 
-      {step === 2 ? (
-        <CustomerDeliveryStep
+      {hasProducts && step === 1 ? (
+        <CustomerStep
           pedidoState={pedidoState}
-          availableBarrios={availableBarrios}
-          canContinue={canContinueStep2}
           customerLookupStatus={customerLookupStatus}
           onLookupByPhone={(phone) => void handleLookupByPhone(phone)}
           updateCliente={updateCliente}
           updateFacturacion={updateFacturacion}
+          canContinue={canContinueStep1}
+          onNext={goNext}
+          onBack={() => navigate(catalogPath)}
+        />
+      ) : null}
+
+      {hasProducts && step === 2 ? (
+        <DeliveryStep
+          pedidoState={pedidoState}
+          availableBarrios={availableBarrios}
+          canContinue={canContinueStep2}
           updateEntrega={updateEntrega}
           selectBarrio={selectBarrio}
+          onNext={goNext}
+          onBack={goBack}
+        />
+      ) : null}
+
+      {hasProducts && step === 3 ? (
+        <MessageStep
+          pedidoState={pedidoState}
+          canContinue={canContinueStep3}
           updateMensaje={updateMensaje}
           updateNotas={updateNotas}
           onNext={goNext}
@@ -1090,7 +1096,7 @@ export function CartPage() {
         />
       ) : null}
 
-      {step === 3 ? (
+      {hasProducts && step === 4 ? (
         <ConfirmationStep
           pedidoState={pedidoState}
           costoDomicilio={costoDomicilio}
@@ -1105,38 +1111,6 @@ export function CartPage() {
           onBack={goBack}
           onConfirm={() => void handleConfirmOrder()}
         />
-      ) : null}
-
-      {showClearCartConfirm ? (
-        <div className="confirm-backdrop" role="presentation" onClick={() => setShowClearCartConfirm(false)}>
-          <section
-            className="confirm-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirmar vaciado del carrito"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2>Vaciar carrito</h2>
-            <p>{`Se eliminaran ${totalItems} producto(s) del carrito. Esta accion no se puede deshacer.`}</p>
-            <div className="confirm-actions">
-              <button type="button" className="ghost" onClick={() => setShowClearCartConfirm(false)}>
-                Cancelar
-              </button>
-              <button type="button" className="cta cta-danger" onClick={confirmClearCart}>
-                Si, vaciar carrito
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {undoItem ? (
-        <aside className="cart-toast" role="status" aria-live="polite">
-          <p>{`${undoItem.nombre} se quito del carrito.`}</p>
-          <button type="button" className="ghost" onClick={undoRemoveProduct}>
-            Deshacer
-          </button>
-        </aside>
       ) : null}
 
     </main>

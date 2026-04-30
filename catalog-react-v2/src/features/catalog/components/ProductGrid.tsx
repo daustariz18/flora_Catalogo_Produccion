@@ -40,6 +40,7 @@ export function ProductGrid({
           key={product.id}
           id={product.id}
           nombre={product.nombre}
+          codigoProducto={product.codigo_producto ?? product.codigoProduct}
           precio={product.precio}
           imagenUrl={product.imagen}
           categoria={product.categoriaNombre ?? product.id_categoria ?? product.categoriaID}

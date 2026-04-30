@@ -8,10 +8,11 @@ import { Header } from "../components/Header";
 import { ProductDetailModal } from "../components/ProductDetailModal";
 import { ProductGrid } from "../components/ProductGrid";
 import { useCompanyData } from "../hooks/useCompanyData";
+import { resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
 
 export function CatalogPage() {
   const { tenantSlug = "" } = useParams();
-  const activeTenant = tenantSlug;
+  const activeTenant = resolveTenantSlug(tenantSlug);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [detailProduct, setDetailProduct] = useState<Producto | null>(null);
@@ -30,8 +31,12 @@ export function CatalogPage() {
     setAvailableBarrios(barrios);
   }, [barrios, setAvailableBarrios]);
 
+  useEffect(() => {
+    storeTenantSlug(activeTenant);
+  }, [activeTenant]);
+
   if (isLoading) {
-    return <main className="loading-screen">Cargando catalogo floral...</main>;
+    return <main className="loading-screen">Cargando catalogo...</main>;
   }
 
   if (error) {

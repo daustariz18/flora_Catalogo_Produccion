@@ -1,12 +1,14 @@
 import { Link, useParams } from "react-router-dom";
 import { getCartTotalItems, getCartTotalPrice, useCartStore } from "../store/cartStore";
 import { formatCOP } from "../../../shared/utils/currency";
+import { buildTenantPath, resolveTenantSlug } from "../../../shared/utils/tenantSlug";
 
 export function CartSummaryBar() {
   const { tenantSlug = "" } = useParams();
+  const resolvedTenantSlug = resolveTenantSlug(tenantSlug);
   const items = useCartStore((state) => state.pedidoState.productos);
   const totalItems = getCartTotalItems(items);
-  const cartPath = `/catalogo/${tenantSlug}/carrito`;
+  const cartPath = buildTenantPath(resolvedTenantSlug, "/carrito");
 
   if (!totalItems) {
     return null;
@@ -20,7 +22,7 @@ export function CartSummaryBar() {
           <p className="bottom-checkout-price">{formatCOP(getCartTotalPrice(items))}</p>
         </div>
         <Link to={cartPath} className="cart-link bottom-checkout-action">
-          Ver carrito
+          Ver carrito y continuar
         </Link>
       </div>
     </aside>

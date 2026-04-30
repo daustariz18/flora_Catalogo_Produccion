@@ -14,6 +14,8 @@ export interface Categoria {
 export interface Producto {
   id: number;
   id_producto?: number;
+  codigo_producto?: string;
+  codigoProduct?: string;
   nombre: string;
   precio: number;
   imagen: string;

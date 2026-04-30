@@ -1,8 +1,12 @@
+import { fetchPublicApiJson } from "../../../shared/api/publicApi";
+
 export type PublicProducto = {
   id: number;
   id_producto?: number;
+  codigo_producto?: string;
+  codigoProduct?: string;
   nombre: string;
-  precio: string;
+  precio: string | number;
   descripcion: string | null;
   imagen_url: string | null;
   nombre_categoria?: string | null;
@@ -20,6 +24,8 @@ export type PublicBarrio = {
 };
 
 export type PublicEmpresa = {
+  id?: number;
+  slug?: string | null;
   nombre: string;
   logoUrl?: string | null;
   logo_url?: string | null;
@@ -52,23 +58,9 @@ export type PublicCatalogoResponse = {
   empresa: PublicEmpresa | null;
   categorias: PublicCategoria[];
   productos: PublicProducto[];
+  catalogo?: PublicProducto[];
   barrios: PublicBarrio[];
 };
-
-const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  (import.meta.env.VITE_API_URL as string | undefined)
-)
-  ?.trim()
-  .replace(/\/+$/, "");
-
-function buildPublicApiUrl(path: string): string {
-  if (!API_BASE_URL) {
-    return path;
-  }
-
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-}
 
 type PublicCatalogRawResponse =
   | PublicProducto[]
@@ -94,71 +86,74 @@ type PublicCatalogRawResponse =
     };
 
 export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCatalogoResponse> {
-  const endpoint = buildPublicApiUrl(`/api/public/${encodeURIComponent(tenantSlug)}/catalogo`);
-  let response: Response;
+  const payload = await fetchPublicApiJson<PublicCatalogRawResponse>(
+    `/api/public/${encodeURIComponent(tenantSlug)}/catalogo`,
+    "catalogo publico",
+  );
 
-  try {
-    response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-  } catch {
-    throw new Error("No fue posible conectar con el API de catalogo publico.");
-  }
-
-  if (response.status === 404) {
+  if (Array.isArray(payload)) {
     return {
       empresa: null,
       categorias: [],
-      productos: [],
+      productos: payload,
       barrios: [],
     };
   }
 
-  if (!response.ok) {
-    throw new Error(`Error cargando catalogo (${response.status})`);
+  const barrios = normalizeBarrios(payload.barrios ?? payload.empresa?.barrios ?? []);
+  const productos = pickPublicProducts(payload);
+
+  return {
+    empresa: payload.empresa ?? null,
+    categorias: payload.categorias ?? [],
+    productos,
+    barrios,
+  };
+}
+
+function pickPublicProducts(payload: Exclude<PublicCatalogRawResponse, PublicProducto[]>): PublicProducto[] {
+  const productos = Array.isArray(payload.productos) ? payload.productos : [];
+  const catalogo = Array.isArray(payload.catalogo) ? payload.catalogo : [];
+
+  if (productos.length > 0 && catalogo.length > 0) {
+    return mergeCatalogProducts(productos, catalogo);
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!contentType.includes("application/json")) {
-    if (import.meta.env.DEV && !API_BASE_URL) {
-      return {
-        empresa: null,
-        categorias: [],
-        productos: [],
-        barrios: [],
-      };
-    }
-
-    throw new Error("Respuesta invalida del servidor de catalogo publico.");
+  if (productos.length > 0) {
+    return productos;
   }
 
-  try {
-    const payload = (await response.json()) as PublicCatalogRawResponse;
+  if (catalogo.length > 0) {
+    return catalogo;
+  }
 
-    if (Array.isArray(payload)) {
-      return {
-        empresa: null,
-        categorias: [],
-        productos: payload,
-        barrios: [],
-      };
+  return [];
+}
+
+function mergeCatalogProducts(primary: PublicProducto[], fallback: PublicProducto[]): PublicProducto[] {
+  const byId = new Map<string, PublicProducto>();
+
+  for (const item of fallback) {
+    byId.set(getProductKey(item), item);
+  }
+
+  return primary.map((item) => {
+    const fallbackItem = byId.get(getProductKey(item));
+
+    if (!fallbackItem) {
+      return item;
     }
-
-    const barrios = normalizeBarrios(payload.barrios ?? payload.empresa?.barrios ?? []);
 
     return {
-      empresa: payload.empresa ?? null,
-      categorias: payload.categorias ?? [],
-      productos: payload.productos ?? payload.catalogo ?? [],
-      barrios,
+      ...fallbackItem,
+      ...item,
+      codigo_producto: item.codigo_producto ?? item.codigoProduct ?? fallbackItem.codigo_producto ?? fallbackItem.codigoProduct,
     };
-  } catch {
-    throw new Error("No se pudo procesar la respuesta del catalogo publico.");
-  }
+  });
+}
+
+function getProductKey(product: PublicProducto): string {
+  return String(product.id_producto ?? product.id);
 }
 
 function normalizeBarrios(

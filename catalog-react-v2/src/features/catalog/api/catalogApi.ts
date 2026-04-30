@@ -11,8 +11,8 @@ const DEFAULT_COMPANY_COLOR = "#d94b8a";
 const mockCatalog: CatalogResponse = {
   empresa: {
     id: 3,
-    nombre: "Floreria Rosa",
-    logo: "https://ddy2osi8uorg4.cloudfront.net/tenants/flora/logos/logo.png",
+    nombre: "Catalogo Demo",
+    logo: "https://ddy2osi8uorg4.cloudfront.net/tenants/demo/logos/logo.png",
     colorPrimario: "#d94b8a",
   },
   categorias: [
@@ -24,7 +24,7 @@ const mockCatalog: CatalogResponse = {
       id: 10,
       nombre: "Ramo Rosas Premium",
       precio: 95000,
-      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/flora/productos/10.jpg",
+      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/demo/productos/10.jpg",
       categoriaID: 1,
       descripcion: "Rosas premium con follaje verde y empaque elegante.",
     },
@@ -32,7 +32,7 @@ const mockCatalog: CatalogResponse = {
       id: 11,
       nombre: "Ramo Primavera",
       precio: 78000,
-      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/flora/productos/11.jpg",
+      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/demo/productos/11.jpg",
       categoriaID: 1,
       descripcion: "Mezcla de flores frescas de temporada.",
     },
@@ -40,7 +40,7 @@ const mockCatalog: CatalogResponse = {
       id: 12,
       nombre: "Caja Floral Fiesta",
       precio: 105000,
-      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/flora/productos/12.jpg",
+      imagen: "https://ddy2osi8uorg4.cloudfront.net/tenants/demo/productos/12.jpg",
       categoriaID: 2,
       descripcion: "Arreglo vibrante ideal para celebraciones.",
     },
@@ -85,6 +85,7 @@ function normalizeProduct(product: Partial<Producto>): Producto {
   return {
     id: Number(product.id ?? 0),
     id_producto: product.id_producto ?? product.id,
+    codigo_producto: product.codigo_producto ?? product.codigoProduct,
     nombre: product.nombre ?? "Producto sin nombre",
     precio: Number(product.precio ?? 0),
     imagen: product.imagen ?? "",
@@ -137,6 +138,7 @@ function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Product
     return {
       id: item.id,
       id_producto: item.id_producto ?? item.id,
+      codigo_producto: item.codigo_producto ?? item.codigoProduct,
       nombre: item.nombre,
       precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
       imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",

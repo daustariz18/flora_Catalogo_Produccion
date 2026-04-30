@@ -83,7 +83,11 @@ export function useCompanyData(tenantSlug: string): UseCompanyDataResult {
         setProducts([]);
         setCategories([]);
         setBarrios([]);
-        setError(loadError instanceof Error ? loadError.message : "No fue posible cargar datos de la empresa.");
+        if (loadError instanceof Error && loadError.message.toLowerCase().includes("slug")) {
+          setError(loadError.message);
+        } else {
+          setError("No pudimos cargar el catalogo en este momento. Verifica que el backend publico este disponible para este tenant.");
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -162,29 +166,30 @@ function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Product
   return [...items]
     .sort((a, b) => (a.id_producto ?? a.id) - (b.id_producto ?? b.id))
     .map((item) => {
-    const normalizedCategory =
-      item.nombre_categoria?.trim() ||
-      item.categoria_nombre?.trim() ||
-      item.categoria?.nombre?.trim() ||
-      "Sin categoria";
+      const normalizedCategory =
+        item.nombre_categoria?.trim() ||
+        item.categoria_nombre?.trim() ||
+        item.categoria?.nombre?.trim() ||
+        "Sin categoria";
 
-    if (!categoryIds.has(normalizedCategory)) {
-      categoryIds.set(normalizedCategory, categoryIds.size + 1);
-    }
+      if (!categoryIds.has(normalizedCategory)) {
+        categoryIds.set(normalizedCategory, categoryIds.size + 1);
+      }
 
-    const categoryId = categoryIds.get(normalizedCategory) ?? 0;
-    const parsedPrice = Number(item.precio);
+      const categoryId = categoryIds.get(normalizedCategory) ?? 0;
+      const parsedPrice = Number(item.precio);
 
-    return {
-      id: item.id,
-      id_producto: item.id_producto ?? item.id,
-      nombre: item.nombre,
-      precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
-      imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
-      categoriaID: categoryId,
-      id_categoria: categoryId,
-      categoriaNombre: normalizedCategory,
-      descripcion: item.descripcion ?? "Descripcion no disponible.",
-    };
-  });
+      return {
+        id: item.id,
+        id_producto: item.id_producto ?? item.id,
+        codigo_producto: item.codigo_producto ?? item.codigoProduct,
+        nombre: item.nombre,
+        precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
+        imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
+        categoriaID: categoryId,
+        id_categoria: categoryId,
+        categoriaNombre: normalizedCategory,
+        descripcion: item.descripcion ?? "Descripcion no disponible.",
+      };
+    });
 }

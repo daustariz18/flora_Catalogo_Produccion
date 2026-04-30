@@ -1,24 +1,39 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { formatCOP } from "../../../shared/utils/currency";
+import { buildTenantPath, resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
 import { useCartStore } from "../store/cartStore";
+import type { SubmittedOrder } from "../store/cartStore";
 import { buildOrderSummary } from "../utils/orderSummary";
 
 export function OrderSuccessPage() {
   const { tenantSlug = "" } = useParams();
+  const resolvedTenantSlug = resolveTenantSlug(tenantSlug);
   const lastSubmittedOrder = useCartStore((state) => state.lastSubmittedOrder);
-  const clearCart = useCartStore((state) => state.clearCart);
-  const clearLastSubmittedOrder = useCartStore((state) => state.clearLastSubmittedOrder);
+  const resetCheckoutFlow = useCartStore((state) => state.resetCheckoutFlow);
+  const [order, setOrder] = useState<SubmittedOrder | null>(() => lastSubmittedOrder);
   const [copied, setCopied] = useState(false);
 
-  const catalogPath = `/catalogo/${tenantSlug}`;
-  const cartPath = `/catalogo/${tenantSlug}/carrito`;
+  useEffect(() => {
+    storeTenantSlug(resolvedTenantSlug);
+  }, [resolvedTenantSlug]);
 
-  if (!lastSubmittedOrder) {
+  useEffect(() => {
+    if (!lastSubmittedOrder) {
+      return;
+    }
+
+    setOrder(lastSubmittedOrder);
+    resetCheckoutFlow();
+  }, [lastSubmittedOrder, resetCheckoutFlow]);
+
+  const catalogPath = buildTenantPath(resolvedTenantSlug);
+  const cartPath = buildTenantPath(resolvedTenantSlug, "/carrito");
+
+  if (!order) {
     return <Navigate to={cartPath} replace />;
   }
 
-  const order = lastSubmittedOrder;
   const subtotalProductos = order.pedido.subtotal;
   const envio = Math.max(0, order.totalPrice - subtotalProductos - order.totalIVA);
   const isTransferPending = order.paymentStatus === "pendiente_validacion";
@@ -27,6 +42,10 @@ export function OrderSuccessPage() {
   )}`;
 
   async function handleCopySummary() {
+    if (!order) {
+      return;
+    }
+
     const summary = buildOrderSummary(order);
 
     try {
@@ -38,11 +57,8 @@ export function OrderSuccessPage() {
   }
 
   function handleExitApp() {
-    clearCart();
-    clearLastSubmittedOrder();
-
     try {
-      window.localStorage.removeItem("petalops-checkout-draft");
+      resetCheckoutFlow();
     } catch {
       // ignore storage errors
     }

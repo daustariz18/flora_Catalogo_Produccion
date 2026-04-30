@@ -43,6 +43,12 @@ export default defineConfig([
 ])
 ```
 
+## API configuration
+
+- `VITE_API_BASE_URL` should point to the public backend in production.
+- `VITE_API_URL` is kept as a compatibility alias.
+- If the backend is not exposed under `/api`, the catalog shows a clear error instead of pretending there are no products.
+
 You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js

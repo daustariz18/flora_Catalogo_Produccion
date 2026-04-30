@@ -5,6 +5,7 @@ import { formatCOP } from "../../../shared/utils/currency";
 interface ProductCardProps {
   id: number;
   nombre: string;
+  codigoProducto?: string;
   precio: number;
   imagenUrl: string;
   categoria: number | string;
@@ -17,6 +18,7 @@ const FALLBACK_IMAGE = "/product-placeholder.svg";
 export const ProductCard = memo(function ProductCard({
   id,
   nombre,
+  codigoProducto,
   precio,
   imagenUrl,
   categoria,
@@ -61,6 +63,7 @@ export const ProductCard = memo(function ProductCard({
           Categoria {categoryLabel}
         </p>
         <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{nombre}</h3>
+        {codigoProducto ? <p className="text-xs font-medium text-slate-500">Codigo: {codigoProducto}</p> : null}
         <p className="text-slate-900 font-semibold">{formatCOP(precio)}</p>
 
         <button

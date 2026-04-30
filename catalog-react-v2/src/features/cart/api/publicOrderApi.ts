@@ -1,3 +1,5 @@
+import { fetchPublicApiJson } from "../../../shared/api/publicApi";
+
 export interface CreateClienteRequest {
   identificacion: string;
   nombreCompleto: string;
@@ -5,6 +7,16 @@ export interface CreateClienteRequest {
   telefono?: string;
   indicativo?: string;
   email?: string;
+  nombre_completo?: string;
+  nombre?: string;
+  name?: string;
+  phone?: string;
+  celular?: string;
+  correo?: string;
+  documento?: string;
+  dni?: string;
+  countryCode?: string;
+  codigo_pais?: string;
 }
 
 export interface CreateClienteResponse {
@@ -16,29 +28,29 @@ export interface CreateClienteResponse {
   email: string | null;
 }
 
-export async function createCliente(
-  tenantSlug: string,
-  payload: CreateClienteRequest,
-): Promise<CreateClienteResponse> {
-  const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/clientes`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(await buildPublicOrderError(res, "clientes", tenantSlug));
-  }
-
-  return (await res.json()) as CreateClienteResponse;
-}
-
 export interface CreateOrderItemRequest {
   productoID: number;
   cantidad: number;
+  producto_id?: number;
+  productoId?: number;
+  id_producto?: number;
+  id?: number;
+  product_id?: number;
+  productId?: number;
+  qty?: number;
+  quantity?: number;
+  count?: number;
 }
 
 export interface CreateOrderRequest {
+  cliente?: {
+    nombre_completo?: string;
+    identificacion?: string;
+    telefono?: string;
+    email?: string;
+    tipo_ident?: string;
+    indicativo?: string;
+  };
   sucursalID?: number;
   nombre?: string;
   nombreCliente?: string;
@@ -65,11 +77,47 @@ export interface CreateOrderRequest {
   metodoPago?: "wompi" | "transferencia" | "efectivo";
   metodo_pago?: "wompi" | "transferencia" | "efectivo";
   items: CreateOrderItemRequest[];
+  productos?: CreateOrderItemRequest[];
+  detalles?: CreateOrderItemRequest[];
+  order_items?: CreateOrderItemRequest[];
+  cart_items?: CreateOrderItemRequest[];
+  line_items?: CreateOrderItemRequest[];
+  cart?: CreateOrderItemRequest[];
+  carrito?: CreateOrderItemRequest[];
   totalBruto: number;
   totalIVA: number;
   totalNeto: number;
   fechaPedido?: string;
   version?: number;
+  metodoEntrega?: "domicilio" | "recoger";
+  metodo_entrega?: "domicilio" | "recoger";
+  direccionEntrega?: string;
+  direccion_entrega?: string;
+  complementoEntrega?: string;
+  complemento_entrega?: string;
+  barrioEntrega?: string;
+  barrio_entrega?: string;
+  barrioEntregaID?: number | null;
+  barrio_entrega_id?: number | null;
+  barrio_id?: number | null;
+  id_barrio?: number | null;
+  nombre_barrio?: string;
+  barrio_nombre?: string;
+  costoDomicilio?: number;
+  costo_domicilio?: number;
+  fechaEntrega?: string;
+  fecha_entrega?: string;
+  fechaProgramada?: string;
+  fecha_programada?: string;
+  nombreDestinatario?: string;
+  nombre_destinatario?: string;
+  telefonoDestinatario?: string;
+  telefono_destinatario?: string;
+  mensaje?: string;
+  mensaje_tarjeta?: string;
+  firma?: string;
+  firma_tarjeta?: string;
+  notas?: string;
 }
 
 export interface CreateOrderResponse {
@@ -84,11 +132,6 @@ export interface CreateOrderResponse {
   totalBruto: number;
   totalIVA: number;
   totalNeto: number;
-}
-
-export interface ApiErrorResponse {
-  message?: string;
-  detail?: string | { loc: string[]; msg: string; type: string }[];
 }
 
 export interface LookupClienteResult {
@@ -114,38 +157,32 @@ interface LookupClienteApiResponse {
   } | null;
 }
 
-const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  (import.meta.env.VITE_API_URL as string | undefined)
-)
-  ?.trim()
-  .replace(/\/+$/, "");
-
-function buildPublicApiUrl(path: string): string {
-  if (!API_BASE_URL) {
-    return path;
-  }
-
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+export async function createCliente(
+  tenantSlug: string,
+  payload: CreateClienteRequest,
+): Promise<CreateClienteResponse> {
+  return await fetchPublicApiJson<CreateClienteResponse>(
+    `/api/public/${encodeURIComponent(tenantSlug)}/clientes`,
+    "clientes publicos",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function createOrder(
   tenantSlug: string,
   payload: CreateOrderRequest,
 ): Promise<CreateOrderResponse> {
-  const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/pedidos`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  return await fetchPublicApiJson<CreateOrderResponse>(
+    `/api/public/${encodeURIComponent(tenantSlug)}/pedidos`,
+    "pedidos publicos",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(await buildPublicOrderError(res, "pedidos", tenantSlug));
-  }
-
-  return (await res.json()) as CreateOrderResponse;
+  );
 }
 
 export async function lookupClienteByTelefono(
@@ -161,22 +198,18 @@ export async function lookupClienteByTelefono(
   }
 
   const normalizedTelefonoCompleto = `${normalizedIndicativo}${normalizedPhone}`.replace(/\s+/g, "");
-  const params = new URLSearchParams({
+  const query = new URLSearchParams({
     telefono: normalizedPhone,
     telefono_completo: normalizedTelefonoCompleto,
     indicativo: normalizedIndicativo,
   });
 
   try {
-    const res = await fetch(buildPublicApiUrl(`/api/public/${tenantSlug}/clientes/buscar?${params.toString()}`), {
-      method: "GET",
-    });
+    const payload = await fetchPublicApiJson<LookupClienteApiResponse>(
+      `/api/public/${encodeURIComponent(tenantSlug)}/clientes/buscar?${query.toString()}`,
+      "clientes publicos",
+    );
 
-    if (!res.ok) {
-      return null;
-    }
-
-    const payload = (await res.json()) as LookupClienteApiResponse;
     if (!payload?.encontrado || !payload.cliente) {
       return null;
     }
@@ -202,36 +235,4 @@ export async function lookupClienteByTelefono(
   } catch {
     return null;
   }
-}
-
-async function buildPublicOrderError(
-  response: Response,
-  endpoint: "clientes" | "pedidos",
-  tenantSlug: string,
-): Promise<string> {
-  if (response.status === 404) {
-    return `El checkout web aun no esta habilitado para "${tenantSlug}". El endpoint publico /${endpoint} no existe en este backend.`;
-  }
-
-  let message = `Error HTTP ${response.status}`;
-
-  try {
-    const err = (await response.json()) as ApiErrorResponse;
-
-    if (import.meta.env.DEV) {
-      console.error(`[publicOrderApi:${endpoint}] error response:`, err);
-    }
-
-    if (err?.message) {
-      message = err.message;
-    } else if (Array.isArray(err?.detail)) {
-      message = err.detail.map((d) => `${d.loc.join(".")}: ${d.msg}`).join(" | ");
-    } else if (typeof err?.detail === "string") {
-      message = err.detail;
-    }
-  } catch {
-    // keep status fallback
-  }
-
-  return message;
 }

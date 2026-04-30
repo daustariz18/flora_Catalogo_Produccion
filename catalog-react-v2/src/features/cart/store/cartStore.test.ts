@@ -1,0 +1,159 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { getCartTotalItems, useCartStore } from "./cartStore";
+
+function resetStore() {
+  useCartStore.setState({
+    pedidoState: {
+      productos: [],
+      subtotal: 0,
+      cliente: {
+        clienteID: 0,
+        nombre: "",
+        indicativo: "+57",
+        telefono: "",
+        facturacion: {
+          requiereFactura: true,
+          tipoIdentificacion: "",
+          identificacion: "",
+          email: "",
+        },
+      },
+      entrega: {
+        metodo: "domicilio",
+        nombreDestinatario: "",
+        telefono: "",
+        direccion: "",
+        complemento: "",
+        barrioID: null,
+        barrio: "",
+        costoDomicilio: 0,
+        fecha: "hoy",
+        fechaProgramada: "",
+      },
+      mensaje: {
+        texto: "",
+        firma: "",
+      },
+      notas: "",
+      total: 0,
+    },
+    lastSubmittedOrder: null,
+    availableBarrios: [],
+  });
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  resetStore();
+});
+
+describe("cartStore", () => {
+  it("adds products and recalculates subtotal and total", () => {
+    const store = useCartStore.getState();
+
+    store.addProduct({
+      id: 1,
+      nombre: "Rosa",
+      precio: 10000,
+      imagen: "/rosa.png",
+    });
+
+    expect(useCartStore.getState().pedidoState.productos).toHaveLength(1);
+    expect(useCartStore.getState().pedidoState.subtotal).toBe(10000);
+    expect(useCartStore.getState().pedidoState.total).toBe(10000);
+    expect(getCartTotalItems(useCartStore.getState().pedidoState.productos)).toBe(1);
+
+    store.increaseQty(1);
+
+    expect(useCartStore.getState().pedidoState.productos[0].cantidad).toBe(2);
+    expect(useCartStore.getState().pedidoState.subtotal).toBe(20000);
+    expect(useCartStore.getState().pedidoState.total).toBe(20000);
+  });
+
+  it("selects a barrio and updates delivery total", () => {
+    const store = useCartStore.getState();
+
+    store.addProduct({
+      id: 1,
+      nombre: "Rosa",
+      precio: 10000,
+      imagen: "/rosa.png",
+    });
+
+    store.selectBarrio({ id: 10, nombre: "Miramar", costoDomicilio: 5000 });
+
+    expect(useCartStore.getState().pedidoState.entrega.barrio).toBe("Miramar");
+    expect(useCartStore.getState().pedidoState.entrega.costoDomicilio).toBe(5000);
+    expect(useCartStore.getState().pedidoState.total).toBe(15000);
+  });
+
+  it("toggles billing data off and clears invoice fields", () => {
+    const store = useCartStore.getState();
+
+    store.updateFacturacion("email", "ana@correo.com");
+    store.updateFacturacion("identificacion", "900123456");
+    store.toggleFacturacion(false);
+
+    expect(useCartStore.getState().pedidoState.cliente.facturacion.requiereFactura).toBe(false);
+    expect(useCartStore.getState().pedidoState.cliente.facturacion.identificacion).toBe("");
+    expect(useCartStore.getState().pedidoState.cliente.facturacion.email).toBe("");
+  });
+
+  it("submits and resets the cart state", () => {
+    const store = useCartStore.getState();
+
+    store.addProduct({
+      id: 1,
+      nombre: "Rosa",
+      precio: 10000,
+      imagen: "/rosa.png",
+    });
+    store.updateEntrega("nombreDestinatario", "Luis");
+
+    const order = store.submitOrder("flora", 8, "PED-8", 12000, 1900, "transferencia");
+
+    expect(order?.id).toBe("PED-8");
+    expect(order?.paymentStatus).toBe("pendiente_validacion");
+    expect(useCartStore.getState().pedidoState.productos).toHaveLength(0);
+    expect(useCartStore.getState().lastSubmittedOrder?.pedidoID).toBe(8);
+  });
+
+  it("clears the checkout flow and removes persisted draft data", () => {
+    const store = useCartStore.getState();
+
+    store.addProduct({
+      id: 1,
+      nombre: "Rosa",
+      precio: 10000,
+      imagen: "/rosa.png",
+    });
+    store.submitOrder("flora", 8, "PED-8", 12000, 1900, "transferencia");
+
+    expect(localStorage.getItem("petalops-checkout-draft")).not.toBeNull();
+
+    store.resetCheckoutFlow();
+
+    expect(useCartStore.getState().pedidoState.productos).toHaveLength(0);
+    expect(useCartStore.getState().pedidoState.cliente.nombre).toBe("");
+    expect(useCartStore.getState().lastSubmittedOrder).toBeNull();
+    expect(localStorage.getItem("petalops-checkout-draft")).toBeNull();
+  });
+
+  it("deduplicates and sorts available barrios", () => {
+    const store = useCartStore.getState();
+
+    store.setAvailableBarrios([
+      { id: 2, nombre: "  Miramar ", costoDomicilio: 5000 },
+      { id: 3, nombre: "Centro", costoDomicilio: 3000 },
+      { id: 4, nombre: "miramar", costoDomicilio: 7000 },
+    ]);
+
+    expect(useCartStore.getState().availableBarrios).toHaveLength(2);
+    expect(useCartStore.getState().availableBarrios).toEqual(
+      expect.arrayContaining([
+        { id: 3, nombre: "Centro", costoDomicilio: 3000 },
+        { id: 2, nombre: "  Miramar ", costoDomicilio: 5000 },
+      ]),
+    );
+  });
+});

@@ -83,6 +83,7 @@ interface CartStore {
   removeProduct: (productId: number) => void;
   removeItem: (productId: number) => void;
   clearCart: () => void;
+  resetCheckoutFlow: () => void;
   setClienteID: (id: number) => void;
   updateCliente: (field: "nombre" | "indicativo" | "telefono", value: string) => void;
   updateFacturacion: (field: keyof Omit<PedidoFacturacion, "requiereFactura">, value: string) => void;
@@ -139,6 +140,8 @@ const initialPedidoState: PedidoState = {
   total: 0,
 };
 
+const CHECKOUT_DRAFT_STORAGE_KEY = "petalops-checkout-draft";
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
@@ -186,9 +189,21 @@ export const useCartStore = create<CartStore>()(
         set((state) => {
           const productos = state.pedidoState.productos.filter((product) => product.id !== productId);
           return buildPedidoStatePatch(state.pedidoState, { productos });
-        }),
+      }),
       removeItem: (productId) => get().removeProduct(productId),
       clearCart: () => set({ pedidoState: initialPedidoState }),
+      resetCheckoutFlow: () => {
+        set({
+          pedidoState: initialPedidoState,
+          lastSubmittedOrder: null,
+        });
+
+        try {
+          window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
+        } catch {
+          // ignore storage cleanup failures
+        }
+      },
       setClienteID: (id) =>
         set((state) => ({
           pedidoState: {
@@ -250,7 +265,7 @@ export const useCartStore = create<CartStore>()(
             entrega: {
               ...state.pedidoState.entrega,
               barrioID: barrio?.id ?? null,
-              barrio: barrio?.nombre ?? "",
+              barrio: barrio?.nombre ?? state.pedidoState.entrega.barrio,
               costoDomicilio: barrio?.costoDomicilio ?? 0,
             },
           }),

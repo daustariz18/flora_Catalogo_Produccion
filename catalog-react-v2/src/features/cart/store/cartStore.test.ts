@@ -29,6 +29,7 @@ function resetStore() {
         costoDomicilio: 0,
         fecha: "hoy",
         fechaProgramada: "",
+        rangoHora: "",
       },
       mensaje: {
         texto: "",
@@ -97,6 +98,58 @@ describe("cartStore", () => {
     expect(useCartStore.getState().pedidoState.cliente.facturacion.requiereFactura).toBe(false);
     expect(useCartStore.getState().pedidoState.cliente.facturacion.identificacion).toBe("");
     expect(useCartStore.getState().pedidoState.cliente.facturacion.email).toBe("");
+  });
+
+  it("autocompletes pickup delivery data and clears all delivery fields when switching to domicilio", () => {
+    const store = useCartStore.getState();
+
+    store.updateCliente("nombre", "Ana Perez");
+    store.updateCliente("telefono", "3001234567");
+    store.updateEntrega("direccion", "Calle 100 # 10-20");
+    store.updateEntrega("complemento", "Apto 302");
+    store.selectBarrio({ id: 10, nombre: "Miramar", costoDomicilio: 5000 });
+
+    store.updateEntrega("metodo", "recoger");
+
+    expect(useCartStore.getState().pedidoState.entrega.metodo).toBe("recoger");
+    expect(useCartStore.getState().pedidoState.entrega.nombreDestinatario).toBe("Ana Perez");
+    expect(useCartStore.getState().pedidoState.entrega.telefono).toBe("3001234567");
+    expect(useCartStore.getState().pedidoState.entrega.direccion).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.complemento).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.barrio).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.barrioID).toBeNull();
+    expect(useCartStore.getState().pedidoState.entrega.costoDomicilio).toBe(0);
+
+    store.updateEntrega("metodo", "domicilio");
+
+    expect(useCartStore.getState().pedidoState.entrega.metodo).toBe("domicilio");
+    expect(useCartStore.getState().pedidoState.entrega.nombreDestinatario).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.telefono).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.direccion).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.complemento).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.barrio).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.barrioID).toBeNull();
+  });
+
+  it("keeps domicilio fields intact when the same delivery method is reapplied", () => {
+    const store = useCartStore.getState();
+
+    store.updateEntrega("metodo", "domicilio");
+    store.updateEntrega("nombreDestinatario", "Maria");
+    store.updateEntrega("telefono", "3001112233");
+    store.updateEntrega("direccion", "Calle 10");
+    store.updateEntrega("complemento", "Apto 2");
+    store.updateEntrega("barrio", "Centro");
+
+    store.updateEntrega("metodo", "domicilio");
+
+    expect(useCartStore.getState().pedidoState.entrega.nombreDestinatario).toBe("Maria");
+    expect(useCartStore.getState().pedidoState.entrega.telefono).toBe("3001112233");
+    expect(useCartStore.getState().pedidoState.entrega.direccion).toBe("Calle 10");
+    expect(useCartStore.getState().pedidoState.entrega.complemento).toBe("Apto 2");
+    expect(useCartStore.getState().pedidoState.entrega.barrio).toBe("Centro");
+    expect(useCartStore.getState().pedidoState.entrega.barrioID).toBeNull();
+    expect(useCartStore.getState().pedidoState.entrega.costoDomicilio).toBe(0);
   });
 
   it("submits and resets the cart state", () => {

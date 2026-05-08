@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { countryCodes } from "../../../shared/utils/countryCodes";
 import { formatCOP } from "../../../shared/utils/currency";
@@ -7,19 +7,23 @@ import { createOrder, lookupClienteByTelefono, type CreateOrderRequest } from ".
 import { CartItemsList } from "./CartItemsList";
 import { useCartStore } from "../store/cartStore";
 import type { AvailableBarrio, CartItem, PedidoState } from "../store/cartStore";
+import { usePublicBarrios } from "../../catalog/hooks/usePublicBarrios";
 
 type WizardStep = 1 | 2 | 3 | 4;
 type PaymentMethod = "wompi" | "transferencia" | "efectivo";
+const SIGNATURE_PLACEHOLDER = "Anónimo";
 
 interface WizardStepsProps {
   step: WizardStep;
   stepTitles: string[];
+  onStepChange: (step: WizardStep) => void;
 }
 
 interface CustomerStepProps {
   pedidoState: PedidoState;
   customerLookupStatus: "idle" | "loading" | "found" | "not_found" | "error";
   onLookupByPhone: (phone: string) => void;
+  onPhoneChange: (phone: string) => void;
   updateCliente: (field: "nombre" | "indicativo" | "telefono", value: string) => void;
   updateFacturacion: (field: "tipoIdentificacion" | "identificacion" | "email", value: string) => void;
   canContinue: boolean;
@@ -79,30 +83,68 @@ function formatLocalDateISO(date: Date = new Date()): string {
   return localDate.toISOString().slice(0, 10);
 }
 
-function buildFloraWhatsappMessage(pedidoState: PedidoState, totalFinal: number): string {
+function formatPhoneNumber(indicativo: string | null, telefono: string): string {
+  const safeIndicativo = (indicativo ?? "+57").trim();
+  const safeTelefono = telefono.trim();
+  return `${safeIndicativo} ${safeTelefono}`.trim();
+}
+
+function formatDeliveryAddress(direccion: string, complemento: string): string {
+  return [direccion.trim(), complemento.trim()].filter(Boolean).join(" · ");
+}
+
+function isOnOrAfterToday(dateValue: string): boolean {
+  const selectedDate = dateValue.trim();
+  if (!selectedDate) {
+    return false;
+  }
+
+  return selectedDate >= formatLocalDateISO();
+}
+
+export function isDeliveryStepComplete(entrega: PedidoState["entrega"]): boolean {
+  const dateValue = entrega.fecha === "hoy" ? formatLocalDateISO() : entrega.fechaProgramada;
+  const hasValidDate = isOnOrAfterToday(dateValue);
+
+  if (entrega.metodo !== "domicilio") {
+    return hasValidDate;
+  }
+
+  return hasValidDate && entrega.direccion.trim().length > 0 && entrega.barrio.trim().length > 0;
+}
+
+export function isMessageStepComplete(mensaje: PedidoState["mensaje"]): boolean {
+  return mensaje.firma.trim().length > 0;
+}
+
+export function buildFloraWhatsappMessage(pedidoState: PedidoState, totalFinal: number): string {
   const lines: string[] = [
-    "Hola Flora, quiero hacer un pedido:",
-    `Cliente: ${pedidoState.cliente.nombre}`,
-    `Telefono: ${pedidoState.cliente.indicativo ?? "+57"} ${pedidoState.cliente.telefono}`,
-    "Productos:",
-    ...pedidoState.productos.map((producto) => `- ${producto.cantidad} x ${producto.nombre}`),
+    "Hola, ya finalicé mi pedido. Comparto los detalles para validar y continuar con el pago:",
+    "",
+    `Cliente: ${pedidoState.cliente.nombre.trim()}`,
+    `Teléfono: ${formatPhoneNumber(pedidoState.cliente.indicativo, pedidoState.cliente.telefono)}`,
+    "",
+    "Pedido:",
+    ...pedidoState.productos.map((producto) => `• ${producto.cantidad} x ${producto.nombre}`),
+    "",
     `Entrega: ${pedidoState.entrega.metodo === "domicilio" ? "Domicilio" : "Recoger en tienda"}`,
   ];
 
   if (pedidoState.entrega.metodo === "domicilio") {
-    lines.push(`Direccion: ${pedidoState.entrega.direccion}`);
-    if (pedidoState.entrega.barrio) {
-      lines.push(`Barrio: ${pedidoState.entrega.barrio}`);
+    const addressLine = formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento);
+
+    lines.push(`Dirección: ${addressLine}`);
+
+    if (pedidoState.entrega.barrio.trim()) {
+      lines.push(`Barrio: ${pedidoState.entrega.barrio.trim()}`);
     }
   }
 
-  lines.push(`Fecha: ${pedidoState.entrega.fecha === "hoy" ? "Hoy" : pedidoState.entrega.fechaProgramada}`);
-  if (pedidoState.mensaje.texto.trim()) {
-    lines.push(`Mensaje: ${pedidoState.mensaje.texto}`);
-  }
-
+  lines.push(`Fecha: ${pedidoState.entrega.fecha === "hoy" ? "Hoy" : pedidoState.entrega.fechaProgramada.trim()}`);
+  lines.push("");
   lines.push(`Total: ${formatCOP(totalFinal)}`);
-  lines.push("Por favor confirma el pedido y coordina conmigo por este chat.");
+  lines.push("");
+  lines.push("Quedo atento a la información de pago para completar el proceso.");
 
   return lines.join("\n");
 }
@@ -112,7 +154,7 @@ function buildFloraWhatsappUrl(pedidoState: PedidoState, totalFinal: number): st
   return `https://wa.me/573013755838?text=${encodeURIComponent(message)}`;
 }
 
-function WizardSteps({ step, stepTitles }: Readonly<WizardStepsProps>) {
+function WizardSteps({ step, stepTitles, onStepChange }: Readonly<WizardStepsProps>) {
   const gridStyle = { "--wizard-columns": stepTitles.length } as CSSProperties;
 
   return (
@@ -120,16 +162,20 @@ function WizardSteps({ step, stepTitles }: Readonly<WizardStepsProps>) {
       {stepTitles.map((title, index) => {
         const stepNumber = index + 1;
         const status = getStepStatus(stepNumber, step);
+        const isCurrent = status === "current";
 
         return (
-          <div
+          <button
             key={title}
+            type="button"
             className={`wizard-step wizard-step-${status}`}
-            aria-current={status === "current" ? "step" : undefined}
+            aria-current={isCurrent ? "step" : undefined}
+            aria-label={`Ir al paso ${stepNumber}: ${title}`}
+            onClick={() => onStepChange(stepNumber as WizardStep)}
           >
             <span>{stepNumber}</span>
             <strong>{title}</strong>
-          </div>
+          </button>
         );
       })}
     </section>
@@ -140,6 +186,7 @@ function CustomerStep({
   pedidoState,
   customerLookupStatus,
   onLookupByPhone,
+  onPhoneChange,
   updateCliente,
   updateFacturacion,
   canContinue,
@@ -147,7 +194,6 @@ function CustomerStep({
   onBack,
 }: Readonly<CustomerStepProps>) {
   const facturacion = pedidoState.cliente.facturacion;
-  const clienteEncontrado = customerLookupStatus === "found";
   const estadoCliente =
     customerLookupStatus === "found"
       ? "Cliente encontrado"
@@ -157,28 +203,25 @@ function CustomerStep({
           ? "Nuevo cliente"
           : customerLookupStatus === "error"
             ? "Sin conexion"
-            : "Nuevo cliente";
+            : null;
 
   return (
     <section className="wizard-panel" aria-label="Informacion de contacto">
-      <div className="wizard-panel-head">
-        <div>
-          <h2>1. Informacion del cliente</h2>
-          <p>Confirmamos tu identidad y el correo donde se respaldara el pedido.</p>
-        </div>
-      </div>
-
       <section className="checkout-card checkout-card-compact">
-        <div className="compact-card-head">
-          <h3>Informacion del cliente</h3>
-          <span className={`compact-badge ${clienteEncontrado ? "compact-badge-success" : "compact-badge-muted"}`}>
-            {estadoCliente}
-          </span>
+        <div className="compact-card-head customer-card-head">
+          <h3>Datos del cliente</h3>
+          {estadoCliente ? (
+            <span
+              className={`compact-badge ${customerLookupStatus === "found" ? "compact-badge-success" : "compact-badge-muted"}`}
+            >
+              {estadoCliente}
+            </span>
+          ) : null}
         </div>
 
         <div className="compact-form-grid compact-form-grid-top">
           <label className="checkout-field">
-            <span>Telefono WhatsApp</span>
+            <span>Celular de WhatsApp</span>
             <div className="phone-input phone-input-compact">
               <select
                 value={pedidoState.cliente.indicativo ?? "+57"}
@@ -195,19 +238,19 @@ function CustomerStep({
                 type="tel"
                 inputMode="tel"
                 value={pedidoState.cliente.telefono}
-                onChange={(event) => updateCliente("telefono", event.target.value)}
+                onChange={(event) => onPhoneChange(event.target.value)}
                 onBlur={(event) => onLookupByPhone(event.target.value)}
-                placeholder="3128896624"
+                placeholder="3001234567"
                 autoComplete="tel"
                 required
               />
             </div>
             {customerLookupStatus === "loading" ? <small className="checkout-field-help">Buscando cliente...</small> : null}
             {customerLookupStatus === "found" ? (
-              <small className="checkout-field-help">Cliente encontrado. Datos autocompletados.</small>
+              <small className="checkout-field-help">Datos autocompletados.</small>
             ) : null}
             {customerLookupStatus === "not_found" ? (
-              <small className="checkout-field-help">No encontramos cliente con ese telefono.</small>
+              <small className="checkout-field-help">Nuevo cliente. Completa los datos manualmente.</small>
             ) : null}
             {customerLookupStatus === "error" ? (
               <small className="checkout-field-help">No se pudo consultar el cliente en este momento.</small>
@@ -220,14 +263,14 @@ function CustomerStep({
               type="text"
               value={pedidoState.cliente.nombre}
               onChange={(event) => updateCliente("nombre", event.target.value)}
-              placeholder="Diego Ustariz"
+              placeholder="Ej: Andrea Gomez"
               autoComplete="name"
               required
             />
           </label>
 
           <label className="checkout-field">
-            <span>Tipo de identificacion</span>
+            <span>Tipo de identificación</span>
             <select
               value={facturacion.tipoIdentificacion || "cedula"}
               onChange={(event) =>
@@ -241,12 +284,12 @@ function CustomerStep({
           </label>
 
           <label className="checkout-field">
-            <span>Identificacion</span>
+            <span>Identificación</span>
             <input
               type="text"
               value={facturacion.identificacion}
               onChange={(event) => updateFacturacion("identificacion", event.target.value)}
-              placeholder="1062397422"
+              placeholder="1234567890"
               inputMode="numeric"
             />
           </label>
@@ -254,12 +297,12 @@ function CustomerStep({
 
         <div className="compact-form-grid compact-form-grid-bottom">
           <label className="checkout-field checkout-field-wide">
-            <span>Correo electronico (opcional)</span>
+            <span>Correo electrónico (opcional)</span>
             <input
               type="email"
               value={facturacion.email}
               onChange={(event) => updateFacturacion("email", event.target.value)}
-              placeholder="diusme@gmail.com"
+              placeholder="ejemplo@correo.com"
               autoComplete="email"
             />
           </label>
@@ -288,12 +331,37 @@ function DeliveryStep({
   onBack,
 }: Readonly<DeliveryStepProps>) {
   const isDomicilio = pedidoState.entrega.metodo === "domicilio";
+  const isPickup = pedidoState.entrega.metodo === "recoger";
+  const hasResetBlankDelivery = useRef(false);
   const [barrioQuery, setBarrioQuery] = useState(pedidoState.entrega.barrio);
   const [showBarrioOptions, setShowBarrioOptions] = useState(false);
 
   useEffect(() => {
     setBarrioQuery(pedidoState.entrega.barrio);
   }, [pedidoState.entrega.barrio]);
+
+  useEffect(() => {
+    if (hasResetBlankDelivery.current || !isDomicilio) {
+      return;
+    }
+
+    const hasAnyDeliveryData =
+      pedidoState.entrega.nombreDestinatario.trim().length > 0 ||
+      pedidoState.entrega.telefono.trim().length > 0 ||
+      pedidoState.entrega.direccion.trim().length > 0 ||
+      pedidoState.entrega.complemento.trim().length > 0 ||
+      pedidoState.entrega.barrio.trim().length > 0 ||
+      pedidoState.entrega.barrioID !== null ||
+      pedidoState.entrega.costoDomicilio > 0;
+
+    if (!hasAnyDeliveryData) {
+      hasResetBlankDelivery.current = true;
+      return;
+    }
+
+    updateEntrega("metodo", "domicilio");
+    hasResetBlankDelivery.current = true;
+  }, [isDomicilio, pedidoState.entrega, updateEntrega]);
 
   const filteredBarrios = useMemo(() => {
     const query = barrioQuery.trim().toLowerCase();
@@ -330,24 +398,29 @@ function DeliveryStep({
           </button>
           <button
             type="button"
-            className={`delivery-option delivery-option-compact ${pedidoState.entrega.metodo === "recoger" ? "delivery-option-active" : ""}`}
+            className={`delivery-option delivery-option-compact ${isPickup ? "delivery-option-active" : ""}`}
             onClick={() => updateEntrega("metodo", "recoger")}
-            aria-pressed={pedidoState.entrega.metodo === "recoger"}
+            aria-pressed={isPickup}
           >
             <span>Recoger en tienda</span>
           </button>
         </div>
 
+        {isPickup ? (
+          <p className="checkout-field-help checkout-field-help-standalone">
+            Puedes cambiar el nombre y teléfono si otra persona recogerá el pedido.
+          </p>
+        ) : null}
+
         <div className="compact-form-grid compact-form-grid-delivery">
           <label className="checkout-field">
-            <span>Nombre del destinatario *</span>
+            <span>Nombre del destinatario</span>
             <input
               type="text"
               value={pedidoState.entrega.nombreDestinatario}
               onChange={(event) => updateEntrega("nombreDestinatario", event.target.value)}
               placeholder="Ej: Maria Perez"
               autoComplete="name"
-              required
             />
             <small className="checkout-field-help">Escribe aqui el nombre de la persona que recibira el pedido.</small>
           </label>
@@ -369,14 +442,15 @@ function DeliveryStep({
           {isDomicilio ? (
             <>
               <label className="checkout-field">
-                <span>Direccion principal *</span>
+                <span>Direccion Principal *</span>
                 <input
                   type="text"
                   value={pedidoState.entrega.direccion}
                   onChange={(event) => updateEntrega("direccion", event.target.value)}
                   placeholder="Ej: Calle 72 #45-32"
                   autoComplete="street-address"
-                  required
+                  required={isDomicilio}
+                  aria-required={isDomicilio}
                 />
               </label>
 
@@ -392,7 +466,7 @@ function DeliveryStep({
               </label>
 
               <label className="checkout-field checkout-field-wide">
-                <span>Barrio de entrega *</span>
+                <span>Barrios de Entrega *</span>
                 <div className="barrio-combobox">
                   <input
                     type="text"
@@ -413,6 +487,8 @@ function DeliveryStep({
                     }}
                     placeholder="Ej: Miramar"
                     autoComplete="off"
+                    required={isDomicilio}
+                    aria-required={isDomicilio}
                   />
                   {showBarrioOptions && filteredBarrios.length > 0 ? (
                     <div className="barrio-options" role="listbox" aria-label="Barrios disponibles">
@@ -464,11 +540,11 @@ function DeliveryStep({
               />
             </label>
 
-            <label className="checkout-field">
+                        <label className="checkout-field">
               <span>Rango de hora (opcional)</span>
-              <select defaultValue="">
+              <select value={pedidoState.entrega.rangoHora} onChange={(event) => updateEntrega("rangoHora", event.target.value)}>
                 <option value="">Seleccione...</option>
-                <option value="Manana (8am - 12pm)">Manana (8am - 12pm)</option>
+                <option value="Mañana (8am - 12pm)">Mañana (8am - 12pm)</option>
                 <option value="Tarde (2pm - 6pm)">Tarde (2pm - 6pm)</option>
               </select>
             </label>
@@ -527,8 +603,10 @@ function MessageStep({
               type="text"
               value={pedidoState.mensaje.firma}
               onChange={(event) => updateMensaje("firma", event.target.value)}
-              placeholder="Ej: Con amor, tu familia"
+              placeholder={SIGNATURE_PLACEHOLDER}
+              required
             />
+            <small className="checkout-field-help">Si no deseas firmar, escribe {SIGNATURE_PLACEHOLDER}.</small>
           </label>
         </div>
       </section>
@@ -580,19 +658,29 @@ function ConfirmationStep({
     { value: "transferencia", title: "Transferencia", caption: "Confirma con comprobante por WhatsApp" },
     { value: "efectivo", title: "Efectivo", caption: "Pago contra entrega (si aplica)" },
   ];
+  const confirmTitle = isFlora ? "CONFIRMAR PEDIDO" : "FINALIZAR PEDIDO";
+  const confirmSubtitle = isFlora ? "Continuar en WhatsApp" : "Continuar al pago";
+
+  const deliveryLabel =
+    pedidoState.entrega.metodo === "domicilio" ? "Domicilio" : "Recoger en tienda";
+  const deliveryTiming = pedidoState.entrega.fecha === "hoy" ? "Hoy" : "Programada";
+  const deliveryLine = `${deliveryLabel} · ${deliveryTiming}`;
+  const customerLine = `${pedidoState.cliente.nombre} · ${pedidoState.cliente.indicativo ?? "+57"} ${pedidoState.cliente.telefono}`;
+  const addressLine = formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento);
+  const timeRangeLine = pedidoState.entrega.rangoHora.trim();
+  const hasMessage = pedidoState.mensaje.texto.trim().length > 0 || pedidoState.mensaje.firma.trim().length > 0;
 
   return (
     <section className="wizard-panel" aria-label="Resumen final del pedido">
-      <div className="wizard-panel-head">
+      <div className="wizard-panel-head confirmation-panel-head">
         <div>
-          <h2>4. Confirmar pedido</h2>
-          <p>{isFlora ? "Revisa el resumen y confirma el pedido; seras redirigido a WhatsApp." : "Revisa el resumen, elige tu forma de pago y confirma."}</p>
+          <p>{isFlora ? "Revisa el resumen y confirma el pedido." : "Revisa el resumen y elige tu forma de pago."}</p>
         </div>
       </div>
 
       <div className="wizard-review-grid">
-        <section className="checkout-card checkout-summary">
-          <h2>Resumen del pedido</h2>
+        <section className="checkout-card checkout-summary confirmation-summary">
+          <h2>Resumen</h2>
           <CartItemsList
             items={items}
             editable={false}
@@ -602,10 +690,6 @@ function ConfirmationStep({
           />
 
           <div className="checkout-totals">
-            <p>
-              <span>Subtotal</span>
-              <strong>{formatCOP(pedidoState.subtotal)}</strong>
-            </p>
             <p>
               <span>Envio</span>
               <strong>{formatCOP(costoDomicilio)}</strong>
@@ -623,51 +707,66 @@ function ConfirmationStep({
           </div>
         </section>
 
-        <aside className="checkout-card order-meta-card">
-          <h2>Datos de entrega</h2>
+        <aside className="checkout-card order-meta-card confirmation-meta-card">
+          <h2>Entrega</h2>
           <div className="order-meta-list">
             <p>
-              <span>Cliente</span>
-              <strong>{pedidoState.cliente.nombre}</strong>
+              <span>Entrega</span>
+              <strong>{deliveryLine}</strong>
             </p>
             <p>
               <span>Telefono</span>
-              <strong>{`${pedidoState.cliente.indicativo ?? "+57"} ${pedidoState.cliente.telefono}`}</strong>
-            </p>
-            <p>
-              <span>Entrega</span>
-              <strong>{pedidoState.entrega.metodo === "domicilio" ? "Domicilio" : "Recoger en tienda"}</strong>
-            </p>
-            <p>
-              <span>Recibe</span>
-              <strong>{pedidoState.entrega.nombreDestinatario}</strong>
+              <strong>{customerLine}</strong>
             </p>
             {pedidoState.entrega.metodo === "domicilio" ? (
+              <>
+                {addressLine.length > 0 ? (
+                  <p>
+                    <span>Direccion</span>
+                    <strong>{addressLine}</strong>
+                  </p>
+                ) : null}
+                {timeRangeLine ? (
+                  <p>
+                    <span>Rango de hora</span>
+                    <strong>{timeRangeLine}</strong>
+                  </p>
+                ) : null}
+                {pedidoState.entrega.barrio.trim().length > 0 ? (
+                  <p>
+                    <span>Barrio</span>
+                    <strong>{pedidoState.entrega.barrio}</strong>
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {pedidoState.entrega.nombreDestinatario.trim().length > 0 ? (
               <p>
-                <span>Direccion</span>
-                <strong>{pedidoState.entrega.direccion}</strong>
+                <span>Recibe</span>
+                <strong>{pedidoState.entrega.nombreDestinatario}</strong>
               </p>
             ) : null}
             <p>
               <span>Fecha</span>
-              <strong>
-                {pedidoState.entrega.fecha === "hoy" ? "Hoy" : `Programada: ${pedidoState.entrega.fechaProgramada}`}
-              </strong>
+              <strong>{pedidoState.entrega.fecha === "hoy" ? "Hoy" : pedidoState.entrega.fechaProgramada}</strong>
             </p>
-            <p>
-              <span>Mensaje</span>
-              <strong>{pedidoState.mensaje.texto || "Sin mensaje"}</strong>
-            </p>
+            {hasMessage ? (
+              <p>
+                <span>Mensaje</span>
+                <strong>{[pedidoState.mensaje.texto, pedidoState.mensaje.firma].filter(Boolean).join(" · ")}</strong>
+              </p>
+            ) : null}
           </div>
         </aside>
       </div>
 
-      {isFlora ? (
-        <p className="checkout-info">
-          Para Flora, el pedido se registra directamente y luego seras redirigido a WhatsApp para coordinarlo.
-        </p>
-      ) : (
-        <section className="checkout-card">
+      <section className="checkout-trust">
+        <p>✔ Tu pedido quedará registrado automáticamente</p>
+        <p>{isFlora ? "✔ Te enviaremos la información de pago por WhatsApp" : "✔ Te enviaremos la información de pago por WhatsApp"}</p>
+      </section>
+
+      {isFlora ? null : (
+        <section className="checkout-card payment-card">
           <h2>Metodo de pago</h2>
           <div className="payment-methods" role="radiogroup" aria-label="Metodo de pago">
             {paymentOptions.map((option) => {
@@ -698,17 +797,18 @@ function ConfirmationStep({
 
       {submitError ? <p className="checkout-error wizard-submit-error">{submitError}</p> : null}
 
-      <div className="wizard-actions wizard-actions-sticky">
-        <button type="button" className="ghost" onClick={onBack} disabled={isSubmitting}>
+      <div className="wizard-actions wizard-actions-sticky confirmation-actions">
+        <button type="button" className="ghost wizard-action-secondary" onClick={onBack} disabled={isSubmitting}>
           Volver
         </button>
         <button
           type="button"
-          className="cta"
+          className={`cta wizard-action-primary ${isFlora ? "confirmation-action-whatsapp" : ""}`}
           onClick={onConfirm}
           disabled={isSubmitting}
         >
-          {isSubmitting ? "Confirmando..." : "Finalizar pedido"}
+          <span className="confirmation-primary-title">{confirmTitle}</span>
+          <span className="cart-action-subtitle">{confirmSubtitle}</span>
         </button>
       </div>
     </section>
@@ -735,6 +835,8 @@ export function CheckoutPage() {
   const selectBarrio = useCartStore((state) => state.selectBarrio);
   const submitOrder = useCartStore((state) => state.submitOrder);
   const availableBarrios = useCartStore((state) => state.availableBarrios);
+  const setAvailableBarrios = useCartStore((state) => state.setAvailableBarrios);
+  const { barrios } = usePublicBarrios(resolvedTenantSlug);
 
   const costoDomicilio = pedidoState.entrega.metodo === "domicilio" ? pedidoState.entrega.costoDomicilio : 0;
   const catalogPath = buildTenantPath(resolvedTenantSlug);
@@ -751,21 +853,18 @@ export function CheckoutPage() {
     pedidoState.cliente.nombre.trim().length > 1 &&
     pedidoState.cliente.telefono.trim().length >= 7 &&
     pedidoState.cliente.facturacion.identificacion.trim().length > 0;
-  const canContinueStep2Base = pedidoState.entrega.nombreDestinatario.trim().length > 1;
-  const canContinueStep2Fecha =
-    pedidoState.entrega.fecha === "hoy" || pedidoState.entrega.fechaProgramada.trim().length > 0;
-  const canContinueStep2Address = pedidoState.entrega.metodo !== "domicilio" || pedidoState.entrega.direccion.trim().length > 5;
-  const canContinueStep2Barrio =
-    pedidoState.entrega.metodo !== "domicilio" ||
-    (pedidoState.entrega.barrio.trim().length > 1 && pedidoState.entrega.costoDomicilio > 0);
-  const canContinueStep2 = canContinueStep2Base && canContinueStep2Fecha && canContinueStep2Address && canContinueStep2Barrio;
-  const canContinueStep3 = true;
+  const canContinueStep2 = isDeliveryStepComplete(pedidoState.entrega);
+  const canContinueStep3 = isMessageStepComplete(pedidoState.mensaje);
 
-  const stepTitles = useMemo(() => ["Informacion del cliente", "Informacion de entrega", "Mensaje", "Confirmar"], []);
+  const stepTitles = useMemo(() => ["Información del cliente", "Información de entrega", "Mensaje", "Confirmar"], []);
 
   useEffect(() => {
     storeTenantSlug(resolvedTenantSlug);
   }, [resolvedTenantSlug]);
+
+  useEffect(() => {
+    setAvailableBarrios(barrios);
+  }, [barrios, setAvailableBarrios]);
 
   useEffect(() => {
     if (!safeIndicativo) {
@@ -802,6 +901,10 @@ export function CheckoutPage() {
 
   function goBack() {
     setStep((current) => (current <= 1 ? 1 : ((current - 1) as WizardStep)));
+  }
+
+  function goToStep(nextStep: WizardStep) {
+    setStep(nextStep);
   }
 
   async function handleLookupByPhone(phone: string) {
@@ -848,6 +951,11 @@ export function CheckoutPage() {
     }
   }
 
+  function handlePhoneChange(phone: string) {
+    updateCliente("telefono", phone);
+    setCustomerLookupStatus("idle");
+  }
+
   async function handleConfirmOrder() {
     if (!resolvedTenantSlug) {
       setSubmitError("No pudimos identificar el tenant de este pedido. Vuelve al catalogo e intenta de nuevo.");
@@ -862,20 +970,18 @@ export function CheckoutPage() {
 
     if (!canContinueStep2) {
       setStep(2);
-      setSubmitError("Completa los datos de entrega antes de confirmar el pedido.");
+      setSubmitError(
+        pedidoState.entrega.metodo === "domicilio"
+          ? "Completa la direccion principal y el barrio de entrega antes de confirmar el pedido."
+          : "Completa los datos de entrega antes de confirmar el pedido.",
+      );
       return;
     }
 
-    if (pedidoState.entrega.metodo === "domicilio") {
-      const hasDireccion = pedidoState.entrega.direccion.trim().length > 5;
-      const hasBarrio =
-        pedidoState.entrega.barrio.trim().length > 1 || Number.isFinite(pedidoState.entrega.barrioID ?? NaN);
-
-      if (!hasDireccion || !hasBarrio) {
-        setStep(2);
-        setSubmitError("Para envio a domicilio debes completar direccion y barrio antes de confirmar.");
-        return;
-      }
+    if (!isMessageStepComplete(pedidoState.mensaje)) {
+      setStep(3);
+      setSubmitError(`Completa la firma del mensaje. Si prefieres no firmar, escribe ${SIGNATURE_PLACEHOLDER}.`);
+      return;
     }
 
     setSubmitError(null);
@@ -989,10 +1095,12 @@ export function CheckoutPage() {
         nombre_destinatario: pedidoState.entrega.nombreDestinatario,
         telefonoDestinatario: telefonoDestinatario,
         telefono_destinatario: telefonoDestinatario,
-        direccionEntrega: pedidoState.entrega.direccion,
-        direccion_entrega: pedidoState.entrega.direccion,
+        direccionEntrega: formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento),
+        direccion_entrega: formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento),
         complementoEntrega: pedidoState.entrega.complemento,
         complemento_entrega: pedidoState.entrega.complemento,
+        rangoHora: pedidoState.entrega.rangoHora.trim(),
+        rango_hora: pedidoState.entrega.rangoHora.trim(),
         barrioEntrega: pedidoState.entrega.barrio,
         barrio_entrega: pedidoState.entrega.barrio,
         barrioEntregaID: pedidoState.entrega.barrioID,
@@ -1068,7 +1176,7 @@ export function CheckoutPage() {
           <h1>Revisa y confirma tu pedido</h1>
         </div>
         <Link to={catalogPath} className="back-link back-link-muted">
-          Agregar mas flores
+          Agregar otro arreglo
         </Link>
       </header>
 
@@ -1076,18 +1184,19 @@ export function CheckoutPage() {
         <section className="empty-state wizard-empty-state">
           <p>Tu carrito esta vacio por ahora.</p>
           <Link to={catalogPath} className="cta empty-state-action">
-            Agregar mas flores
+            Agregar otro arreglo
           </Link>
         </section>
       )}
 
-      {hasProducts ? <WizardSteps step={step} stepTitles={stepTitles} /> : null}
+      {hasProducts ? <WizardSteps step={step} stepTitles={stepTitles} onStepChange={goToStep} /> : null}
 
       {hasProducts && step === 1 ? (
         <CustomerStep
           pedidoState={pedidoState}
           customerLookupStatus={customerLookupStatus}
           onLookupByPhone={(phone) => void handleLookupByPhone(phone)}
+          onPhoneChange={handlePhoneChange}
           updateCliente={updateCliente}
           updateFacturacion={updateFacturacion}
           canContinue={canContinueStep1}
@@ -1138,3 +1247,4 @@ export function CheckoutPage() {
     </main>
   );
 }
+

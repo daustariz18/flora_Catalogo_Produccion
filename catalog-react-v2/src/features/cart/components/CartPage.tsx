@@ -29,9 +29,6 @@ export function CartPage() {
           <h1>Revisa y edita tus productos</h1>
           <p className="checkout-subtitle">Ajusta cantidades antes de finalizar tu pedido.</p>
         </div>
-        <Link to={catalogPath} className="back-link back-link-muted">
-          Seguir comprando
-        </Link>
       </header>
 
       {totalItems === 0 ? (
@@ -54,22 +51,22 @@ export function CartPage() {
           <section className="cart-footer">
             <p className="cart-footer-kicker">Resumen final</p>
             <div className="cart-footer-summary">
-              <p>
-                <span>Total de productos</span>
+              <p className="cart-footer-summary-products">
+                <span>{`Productos (${totalItems})`}</span>
                 <strong>{totalItems}</strong>
               </p>
-              <p>
+              <p className="cart-footer-summary-total">
                 <span>Total a pagar</span>
                 <strong>{formatCOP(totalPrice)}</strong>
               </p>
             </div>
-            <p className="cart-footer-help">Cuando todo este listo, continua con los datos de entrega y contacto.</p>
             <div className="cart-footer-actions">
-              <Link to={catalogPath} className="ghost">
-                Seguir comprando
+              <Link to={catalogPath} className="ghost cart-footer-secondary-action">
+                <span className="cart-action-title">Seguir comprando</span>
+                <span className="cart-action-subtitle">Volver al catálogo</span>
               </Link>
-              <Link to={checkoutPath} className="cta">
-                Continuar al pedido
+              <Link to={checkoutPath} className="cta cart-footer-primary-action">
+                <span className="cart-action-title">Continuar</span>
               </Link>
             </div>
           </section>

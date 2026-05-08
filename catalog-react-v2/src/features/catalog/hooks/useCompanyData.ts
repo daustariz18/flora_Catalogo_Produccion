@@ -4,9 +4,9 @@ import {
   getCatalogoPublico,
   type PublicCatalogoResponse,
   type PublicBarrio,
-  type PublicProducto,
 } from "../api/publicCatalogApi";
 import { buildCloudfrontAssetUrl, getDefaultTenantLogo } from "../utils/cloudfront";
+import { sortCategoriesForDisplay, sortProductsForDisplay } from "../utils/catalogDisplay";
 
 interface UseCompanyDataResult {
   company: Empresa;
@@ -18,6 +18,20 @@ interface UseCompanyDataResult {
 }
 
 const DEFAULT_COMPANY_COLOR = "#d94b8a";
+
+function normalizeCategoryKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[\s._-]+/g, "")
+    .trim();
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 export function useCompanyData(tenantSlug: string): UseCompanyDataResult {
   const [products, setProducts] = useState<Producto[]>([]);
@@ -68,8 +82,8 @@ export function useCompanyData(tenantSlug: string): UseCompanyDataResult {
           return;
         }
 
-        const mappedProducts = mapPublicProducts(payload.productos, tenantSlug);
-        const mappedCategories = mapCategories(payload, mappedProducts);
+        const mappedProducts = sortProductsForDisplay(mapPublicProducts(payload, tenantSlug));
+        const mappedCategories = sortCategoriesForDisplay(mapCategories(payload, mappedProducts));
 
         setProducts(mappedProducts);
         setCategories(mappedCategories);
@@ -139,32 +153,39 @@ function toCompany(payload: PublicCatalogoResponse, tenantSlug: string): Empresa
   };
 }
 
-function mapCategories(payload: PublicCatalogoResponse, products: Producto[]): Categoria[] {
+export function mapCategories(payload: PublicCatalogoResponse, products: Producto[]): Categoria[] {
   if (payload.categorias.length > 0) {
     return payload.categorias;
   }
 
-  const byName = new Map<string, Categoria>();
+  const byId = new Map<number, Categoria>();
 
   for (const product of products) {
+    const categoryId = toPositiveNumber(product.id_categoria ?? product.categoriaID);
     const name = product.categoriaNombre?.trim() || "Sin categoria";
 
-    if (!byName.has(name)) {
-      byName.set(name, {
-        id: byName.size + 1,
-        nombre: name,
-      });
+    if (!categoryId || byId.has(categoryId)) {
+      continue;
     }
+
+    byId.set(categoryId, {
+      id: categoryId,
+      nombre: name,
+    });
   }
 
-  return Array.from(byName.values());
+  return Array.from(byId.values());
 }
 
-function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Producto[] {
-  const categoryIds = new Map<string, number>();
+export function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: string): Producto[] {
+  const items = Array.isArray(payload.productos) ? payload.productos : [];
+  const categoryIndex = new Map<string, Categoria>();
+
+  for (const category of payload.categorias) {
+    categoryIndex.set(normalizeCategoryKey(category.nombre), category);
+  }
 
   return [...items]
-    .sort((a, b) => (a.id_producto ?? a.id) - (b.id_producto ?? b.id))
     .map((item) => {
       const normalizedCategory =
         item.nombre_categoria?.trim() ||
@@ -172,11 +193,14 @@ function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Product
         item.categoria?.nombre?.trim() ||
         "Sin categoria";
 
-      if (!categoryIds.has(normalizedCategory)) {
-        categoryIds.set(normalizedCategory, categoryIds.size + 1);
-      }
-
-      const categoryId = categoryIds.get(normalizedCategory) ?? 0;
+      const categoryKey = normalizeCategoryKey(normalizedCategory);
+      const matchedCategory = categoryIndex.get(categoryKey);
+      const directCategoryId =
+        toPositiveNumber(item.categoria?.id) ??
+        toPositiveNumber(item.categoriaID) ??
+        toPositiveNumber(item.id_categoria);
+      const categoryId = matchedCategory?.id ?? directCategoryId ?? 0;
+      const categoryName = matchedCategory?.nombre ?? normalizedCategory;
       const parsedPrice = Number(item.precio);
 
       return {
@@ -188,7 +212,7 @@ function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Product
         imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
         categoriaID: categoryId,
         id_categoria: categoryId,
-        categoriaNombre: normalizedCategory,
+        categoriaNombre: categoryName,
         descripcion: item.descripcion ?? "Descripcion no disponible.",
       };
     });

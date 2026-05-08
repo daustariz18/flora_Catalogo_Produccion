@@ -1,22 +1,13 @@
-const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  (import.meta.env.VITE_API_URL as string | undefined)
-)
-  ?.trim()
-  .replace(/\/+$/, "");
+import { apiFetch, buildApiEndpointCandidates, getApiBaseUrl } from "./apiClient";
 
 type PublicApiLabel = "catalogo publico" | "clientes publicos" | "pedidos publicos";
 
 export function getPublicApiBaseUrl(): string | undefined {
-  return API_BASE_URL || undefined;
+  return getApiBaseUrl();
 }
 
 export function buildPublicApiEndpointCandidates(path: string): string[] {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const fallbackPath = normalizedPath.replace(/^\/api(?=\/)/, "");
-  const paths = fallbackPath === normalizedPath ? [normalizedPath] : [normalizedPath, fallbackPath];
-
-  return paths.map((candidatePath) => (API_BASE_URL ? `${API_BASE_URL}${candidatePath}` : candidatePath));
+  return buildApiEndpointCandidates(path);
 }
 
 export async function fetchPublicApiJson<T>(
@@ -31,17 +22,7 @@ export async function fetchPublicApiJson<T>(
     let response: Response;
 
     try {
-      const { headers, body, ...rest } = init;
-      response = await fetch(endpoint, {
-        method: init.method ?? "GET",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          ...(headers ?? {}),
-        },
-        body,
-        ...rest,
-      });
+      response = await apiFetch(endpoint, init);
     } catch {
       lastError = `[publicApi:${label}] No fue posible conectar con ${endpoint}.`;
       continue;
@@ -97,6 +78,10 @@ async function buildHttpError(
 ): Promise<string> {
   if (response.status === 404 && !contentType.includes("application/json")) {
     return `[publicApi:${label}] La ruta ${endpoint} no esta expuesta en este hosting.`;
+  }
+
+  if (response.status === 401) {
+    return `[publicApi:${label}] El backend rechazo la sesion o las credenciales. Verifica el backend configurado.`;
   }
 
   if (contentType.includes("application/json")) {

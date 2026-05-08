@@ -109,6 +109,8 @@ export interface CreateOrderRequest {
   fecha_entrega?: string;
   fechaProgramada?: string;
   fecha_programada?: string;
+  rangoHora?: string;
+  rango_hora?: string;
   nombreDestinatario?: string;
   nombre_destinatario?: string;
   telefonoDestinatario?: string;

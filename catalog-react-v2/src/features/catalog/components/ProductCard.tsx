@@ -58,7 +58,7 @@ export const ProductCard = memo(function ProductCard({
         </div>
       </button>
 
-      <div className="product-body space-y-2 p-3">
+      <div className="product-body p-3">
         <p className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-600">
           Categoria {categoryLabel}
         </p>
@@ -68,7 +68,7 @@ export const ProductCard = memo(function ProductCard({
 
         <button
           type="button"
-          className="product-add mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white"
+          className="product-add mt-auto w-full rounded-lg px-3 py-2 text-sm font-semibold text-white"
           style={{ backgroundColor: companyColor }}
           onClick={() =>
             addItem({

@@ -2,3 +2,4 @@ catalog-react/
 .venv/
 .env
 .log
+.zip

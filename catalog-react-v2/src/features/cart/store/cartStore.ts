@@ -35,6 +35,7 @@ export interface PedidoEntrega {
   costoDomicilio: number;
   fecha: "hoy" | "programada";
   fechaProgramada: string;
+  rangoHora: string;
 }
 
 export interface PedidoMensaje {
@@ -131,6 +132,7 @@ const initialPedidoState: PedidoState = {
     costoDomicilio: 0,
     fecha: "hoy",
     fechaProgramada: "",
+    rangoHora: "",
   },
   mensaje: {
     texto: "",
@@ -251,14 +253,55 @@ export const useCartStore = create<CartStore>()(
           },
         })),
       updateEntrega: (field, value) =>
-        set((state) =>
-          buildPedidoStatePatch(state.pedidoState, {
+        set((state) => {
+          if (field === "metodo") {
+            const nextMetodo = value as PedidoEntrega["metodo"];
+            const currentMetodo = state.pedidoState.entrega.metodo;
+
+            if (nextMetodo === currentMetodo) {
+              return buildPedidoStatePatch(state.pedidoState, {
+                entrega: {
+                  ...state.pedidoState.entrega,
+                },
+              });
+            }
+
+            const nextEntrega: PedidoEntrega = {
+              ...state.pedidoState.entrega,
+              metodo: nextMetodo,
+              ...(nextMetodo === "recoger"
+                ? {
+                    direccion: "",
+                    complemento: "",
+                    barrioID: null,
+                    barrio: "",
+                    costoDomicilio: 0,
+                    nombreDestinatario: state.pedidoState.cliente.nombre,
+                    telefono: state.pedidoState.cliente.telefono,
+                  }
+                : {
+                    nombreDestinatario: "",
+                    telefono: "",
+                    direccion: "",
+                    complemento: "",
+                    barrioID: null,
+                    barrio: "",
+                    costoDomicilio: 0,
+                  }),
+            };
+
+            return buildPedidoStatePatch(state.pedidoState, {
+              entrega: nextEntrega,
+            });
+          }
+
+          return buildPedidoStatePatch(state.pedidoState, {
             entrega: {
               ...state.pedidoState.entrega,
               [field]: value,
             },
-          }),
-        ),
+          });
+        }),
       selectBarrio: (barrio) =>
         set((state) =>
           buildPedidoStatePatch(state.pedidoState, {

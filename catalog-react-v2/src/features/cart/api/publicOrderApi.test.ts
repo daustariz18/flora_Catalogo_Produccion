@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { createCliente, createOrder, lookupClienteByTelefono } from "./publicOrderApi";
 import { createJsonResponse, mockFetchJson } from "../../../test/testUtils";
 
-const API_BASE_URL = "https://catalogo-web-708265049038.us-central1.run.app";
-
 describe("publicOrderApi", () => {
   it("sends order payloads to the public orders endpoint", async () => {
     const fetchMock = mockFetchJson({
@@ -28,7 +26,7 @@ describe("publicOrderApi", () => {
     const result = await createOrder("flora", payload);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `${API_BASE_URL}/api/public/flora/pedidos`,
+      expect.stringContaining("/api/public/flora/pedidos"),
       expect.objectContaining({
         method: "POST",
       }),
@@ -69,7 +67,7 @@ describe("publicOrderApi", () => {
     const result = await lookupClienteByTelefono("flora", "3001234567", "+57");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain(`${API_BASE_URL}/api/public/flora/clientes/buscar?`);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/public/flora/clientes/buscar?");
     expect(result).toEqual({
       nombre: "Ana Perez",
       identificacion: "123",

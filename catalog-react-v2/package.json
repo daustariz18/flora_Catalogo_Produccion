@@ -9,6 +9,7 @@
     "build:cpanel": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-cpanel-zip.ps1",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:env": "node scripts/validate-env-production.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

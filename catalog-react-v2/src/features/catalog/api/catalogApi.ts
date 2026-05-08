@@ -2,11 +2,25 @@ import type { CatalogResponse, Producto } from "../../../shared/types/catalog";
 import {
   getCatalogoPublico,
   type PublicCatalogoResponse,
-  type PublicProducto,
 } from "./publicCatalogApi";
 import { buildCloudfrontAssetUrl, getDefaultTenantLogo } from "../utils/cloudfront";
+import { sortCategoriesForDisplay, sortProductsForDisplay } from "../utils/catalogDisplay";
 
 const DEFAULT_COMPANY_COLOR = "#d94b8a";
+
+function normalizeCategoryKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[\s._-]+/g, "")
+    .trim();
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 const mockCatalog: CatalogResponse = {
   empresa: {
@@ -53,7 +67,7 @@ export async function fetchCatalogByEmpresa(empresaID: string): Promise<CatalogR
   }
 
   const payload = await getCatalogoPublico(empresaID);
-  const products = mapPublicProducts(payload.productos, empresaID);
+  const products = sortProductsForDisplay(mapPublicProducts(payload, empresaID));
 
   return {
     empresa: {
@@ -67,7 +81,7 @@ export async function fetchCatalogByEmpresa(empresaID: string): Promise<CatalogR
         getDefaultTenantLogo(empresaID),
       colorPrimario: payload.empresa?.colorPrimario || payload.empresa?.color_primario || DEFAULT_COMPANY_COLOR,
     },
-    categorias: mapCategories(payload, products),
+    categorias: sortCategoriesForDisplay(mapCategories(payload, products)),
     productos: products,
   };
 }
@@ -78,7 +92,7 @@ export async function fetchPublicProducts(tenantSlug: string): Promise<Producto[
   }
 
   const payload = await getCatalogoPublico(tenantSlug);
-  return mapPublicProducts(payload.productos, tenantSlug);
+  return mapPublicProducts(payload, tenantSlug);
 }
 
 function normalizeProduct(product: Partial<Producto>): Producto {
@@ -100,52 +114,63 @@ function mapCategories(payload: PublicCatalogoResponse, products: Producto[]) {
     return payload.categorias;
   }
 
-  const byName = new Map<string, { id: number; nombre: string }>();
+  const byId = new Map<number, { id: number; nombre: string }>();
 
   for (const product of products) {
+    const categoryId = toPositiveNumber(product.id_categoria ?? product.categoriaID);
     const name = product.categoriaNombre?.trim() || "Sin categoria";
 
-    if (!byName.has(name)) {
-      byName.set(name, {
-        id: byName.size + 1,
-        nombre: name,
-      });
+    if (!categoryId || byId.has(categoryId)) {
+      continue;
     }
+
+    byId.set(categoryId, {
+      id: categoryId,
+      nombre: name,
+    });
   }
 
-  return Array.from(byName.values());
+  return Array.from(byId.values());
 }
 
-function mapPublicProducts(items: PublicProducto[], tenantSlug: string): Producto[] {
-  const categoryIds = new Map<string, number>();
+function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: string): Producto[] {
+  const items = Array.isArray(payload.productos) ? payload.productos : [];
+  const categoryIndex = new Map<string, { id: number; nombre: string }>();
+
+  for (const category of payload.categorias) {
+    categoryIndex.set(normalizeCategoryKey(category.nombre), category);
+  }
 
   return [...items]
-    .sort((a, b) => (a.id_producto ?? a.id) - (b.id_producto ?? b.id))
     .map((item) => {
-    const normalizedCategory =
-      item.nombre_categoria?.trim() ||
-      item.categoria_nombre?.trim() ||
-      item.categoria?.nombre?.trim() ||
-      "Sin categoria";
+      const normalizedCategory =
+        item.nombre_categoria?.trim() ||
+        item.categoria_nombre?.trim() ||
+        item.categoria?.nombre?.trim() ||
+        "Sin categoria";
+      const categoryKey = normalizeCategoryKey(normalizedCategory);
+      const matchedCategory = categoryIndex.get(categoryKey);
+      const directCategoryId =
+        toPositiveNumber(item.categoria_id) ??
+        toPositiveNumber(item.category_id) ??
+        toPositiveNumber(item.categoria?.id) ??
+        toPositiveNumber(item.categoriaID) ??
+        toPositiveNumber(item.id_categoria);
+      const categoryId = matchedCategory?.id ?? directCategoryId ?? 0;
+      const categoryName = matchedCategory?.nombre ?? normalizedCategory;
+      const parsedPrice = Number(item.precio);
 
-    if (!categoryIds.has(normalizedCategory)) {
-      categoryIds.set(normalizedCategory, categoryIds.size + 1);
-    }
-
-    const categoryId = categoryIds.get(normalizedCategory) ?? 0;
-    const parsedPrice = Number(item.precio);
-
-    return {
-      id: item.id,
-      id_producto: item.id_producto ?? item.id,
-      codigo_producto: item.codigo_producto ?? item.codigoProduct,
-      nombre: item.nombre,
-      precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
-      imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
-      categoriaID: categoryId,
-      id_categoria: categoryId,
-      categoriaNombre: normalizedCategory,
-      descripcion: item.descripcion ?? "Descripcion no disponible.",
-    };
-  });
+      return {
+        id: item.id,
+        id_producto: item.id_producto ?? item.id,
+        codigo_producto: item.codigo_producto ?? item.codigoProduct,
+        nombre: item.nombre,
+        precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
+        imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
+        categoriaID: categoryId,
+        id_categoria: categoryId,
+        categoriaNombre: categoryName,
+        descripcion: item.descripcion ?? "Descripcion no disponible.",
+      };
+    });
 }

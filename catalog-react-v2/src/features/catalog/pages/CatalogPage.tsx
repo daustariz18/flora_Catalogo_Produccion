@@ -7,16 +7,28 @@ import { CategoryFilter } from "../components/CategoryFilter";
 import { Header } from "../components/Header";
 import { ProductDetailModal } from "../components/ProductDetailModal";
 import { ProductGrid } from "../components/ProductGrid";
-import { useCompanyData } from "../hooks/useCompanyData";
+import { usePublicBarrios } from "../hooks/usePublicBarrios";
+import { usePublicCatalog } from "../hooks/usePublicCatalog";
 import { resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
 
 export function CatalogPage() {
   const { tenantSlug = "" } = useParams();
   const activeTenant = resolveTenantSlug(tenantSlug);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [detailProduct, setDetailProduct] = useState<Producto | null>(null);
-  const { company, categories, products, barrios, isLoading, error } = useCompanyData(activeTenant);
+  const { barrios } = usePublicBarrios(activeTenant);
+  const {
+    company,
+    categories,
+    products,
+    hasMore,
+    isLoadingCategories,
+    isLoadingProducts,
+    isLoadingInitial,
+    isLoadingMore,
+    error,
+    loadMore,
+  } = usePublicCatalog(activeTenant, selectedCategory);
 
   const addItem = useCartStore((state) => state.addItem);
   const setAvailableBarrios = useCartStore((state) => state.setAvailableBarrios);
@@ -28,14 +40,14 @@ export function CatalogPage() {
   }, [categories, selectedCategory]);
 
   useEffect(() => {
-    setAvailableBarrios(barrios);
-  }, [barrios, setAvailableBarrios]);
-
-  useEffect(() => {
     storeTenantSlug(activeTenant);
   }, [activeTenant]);
 
-  if (isLoading) {
+  useEffect(() => {
+    setAvailableBarrios(barrios);
+  }, [barrios, setAvailableBarrios]);
+
+  if (isLoadingInitial) {
     return <main className="loading-screen">Cargando catalogo...</main>;
   }
 
@@ -49,27 +61,13 @@ export function CatalogPage() {
   }
 
   const companyColor = company.colorPrimario;
+  const hasProducts = products.length > 0;
 
   return (
     <main style={{ "--brand-color": companyColor } as CSSProperties} className="catalog-page">
       <Header company={company} tenantSlug={activeTenant} />
 
       <section className="catalog-content main-content px-4 md:pb-6">
-        <div className="catalog-search-wrap">
-          <svg className="catalog-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="search"
-            className="catalog-search-input"
-            placeholder="Busca flores, ramos o arreglos..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Buscar flores, ramos o arreglos"
-          />
-        </div>
-
         <CategoryFilter
           categories={categories}
           selectedCategory={selectedCategory}
@@ -77,16 +75,33 @@ export function CatalogPage() {
           companyColor={companyColor}
         />
 
-        <ProductGrid
-          products={products}
-          selectedCategory={selectedCategory}
-          searchQuery={searchQuery}
-          companyColor={companyColor}
-          onOpenDetail={setDetailProduct}
-        />
+        {hasProducts ? (
+          <ProductGrid
+            products={products}
+            categories={categories}
+            searchQuery=""
+            companyColor={companyColor}
+            onOpenDetail={setDetailProduct}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={loadMore}
+          />
+        ) : (
+          <section className="catalog-empty-shell">
+            <p className="empty-state">
+              {isLoadingProducts || isLoadingCategories
+                ? "Cargando categorias y productos..."
+                : "Todavia no hay productos publicados para este catalogo."}
+            </p>
+            <button type="button" className="ghost catalog-load-more" onClick={loadMore} disabled={!hasMore || isLoadingMore}>
+              {isLoadingMore ? "Cargando..." : hasMore ? "Cargar mas" : "Sin mas productos"}
+            </button>
+          </section>
+        )}
       </section>
 
       <ProductDetailModal
+        tenantSlug={activeTenant}
         product={detailProduct}
         companyColor={companyColor}
         onClose={() => setDetailProduct(null)}

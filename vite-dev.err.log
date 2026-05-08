@@ -1,0 +1,14 @@
+[2m1:09:46 p. m.[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/public/flora/catalogo[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)
+[2m1:09:46 p. m.[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/public/flora/catalogo[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)
+[2m1:10:08 p. m.[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/public/flora/catalogo[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)
+[2m2:00:26 p. m.[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/features/cart/api/publicOrderApi.ts (resolved id: C:/Users/DiegoArmandoUstarizM/Desktop/JOIN DATA/FloraV2Catalogo/catalog-react-v2/src/features/cart/api/publicOrderApi.ts) in C:/Users/DiegoArmandoUstarizM/Desktop/JOIN DATA/FloraV2Catalogo/catalog-react-v2/src/features/cart/components/CartPage.tsx. Does the file exist?
+[2m2:07:28 p. m.[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/shared/config/tenantRules.ts (resolved id: C:/Users/DiegoArmandoUstarizM/Desktop/JOIN DATA/FloraV2Catalogo/catalog-react-v2/src/shared/config/tenantRules.ts) in C:/Users/DiegoArmandoUstarizM/Desktop/JOIN DATA/FloraV2Catalogo/catalog-react-v2/src/features/cart/components/CartPage.tsx. Does the file exist?

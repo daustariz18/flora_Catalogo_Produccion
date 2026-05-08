@@ -5,6 +5,10 @@ export type PublicProducto = {
   id_producto?: number;
   codigo_producto?: string;
   codigoProduct?: string;
+  categoria_id?: number | null;
+  category_id?: number | null;
+  categoriaID?: number;
+  id_categoria?: number;
   nombre: string;
   precio: string | number;
   descripcion: string | null;

@@ -1,4 +1,5 @@
 const TENANT_STORAGE_KEY = "petalops-last-tenant-slug";
+const DEFAULT_DEV_TENANT_SLUG = (import.meta.env.VITE_DEFAULT_TENANT_SLUG as string | undefined)?.trim() ?? "";
 
 export function normalizeTenantSlug(tenantSlug?: string | null): string {
   return tenantSlug?.trim() ?? "";
@@ -28,7 +29,7 @@ export function storeTenantSlug(tenantSlug?: string | null): void {
 }
 
 export function resolveTenantSlug(tenantSlug?: string | null): string {
-  return normalizeTenantSlug(tenantSlug) || getStoredTenantSlug();
+  return normalizeTenantSlug(tenantSlug) || getStoredTenantSlug() || DEFAULT_DEV_TENANT_SLUG;
 }
 
 export function buildTenantPath(tenantSlug?: string | null, suffix = ""): string {

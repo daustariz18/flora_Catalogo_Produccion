@@ -26,6 +26,7 @@ describe("ProductDetailModal", () => {
       nombre: "Hamburguesa XL",
       precio: 18900,
       imagen: "/fallback.jpg",
+      imagen_md: "/detail-md.jpg",
       categoriaID: 10,
       categoriaNombre: "Hamburguesas",
       codigo_producto: "CAT-123",
@@ -52,6 +53,10 @@ describe("ProductDetailModal", () => {
     expect(screen.getByText("Codigo")).toBeInTheDocument();
     expect(screen.getByText("CAT-123")).toBeInTheDocument();
     expect(screen.getByText("Hamburguesa con doble carne...")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hamburguesa XL" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("/detail-md.jpg"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Anadir al carrito" }));
 
@@ -72,6 +77,7 @@ describe("ProductDetailModal", () => {
           nombre: "Caja Rosas",
           precio: 25000,
           imagen: "/caja.jpg",
+          imagen_md: "/caja-md.jpg",
           categoriaID: 11,
           categoriaNombre: "Rosas",
         }}

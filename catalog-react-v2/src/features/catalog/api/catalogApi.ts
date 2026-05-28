@@ -3,7 +3,7 @@ import {
   getCatalogoPublico,
   type PublicCatalogoResponse,
 } from "./publicCatalogApi";
-import { buildCloudfrontAssetUrl, getDefaultTenantLogo } from "../utils/cloudfront";
+import { getDefaultTenantLogo, resolveProductImageUrl } from "../utils/cloudfront";
 import { sortCategoriesForDisplay, sortProductsForDisplay } from "../utils/catalogDisplay";
 
 const DEFAULT_COMPANY_COLOR = "#d94b8a";
@@ -166,7 +166,16 @@ function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: string):
         codigo_producto: item.codigo_producto ?? item.codigoProduct,
         nombre: item.nombre,
         precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
-        imagen: buildCloudfrontAssetUrl(item.imagen_url, tenantSlug, "productos") || "/product-placeholder.svg",
+        imagen:
+          resolveProductImageUrl(item.imagen_url, tenantSlug) ||
+          resolveProductImageUrl(item.imagen_sm, tenantSlug) ||
+          resolveProductImageUrl(item.imagen_md, tenantSlug) ||
+          resolveProductImageUrl(item.imagen_lg, tenantSlug) ||
+          "/product-placeholder.svg",
+        imagen_url: resolveProductImageUrl(item.imagen_url, tenantSlug) || undefined,
+        imagen_sm: resolveProductImageUrl(item.imagen_sm, tenantSlug) || undefined,
+        imagen_md: resolveProductImageUrl(item.imagen_md, tenantSlug) || undefined,
+        imagen_lg: resolveProductImageUrl(item.imagen_lg, tenantSlug) || undefined,
         categoriaID: categoryId,
         id_categoria: categoryId,
         categoriaNombre: categoryName,

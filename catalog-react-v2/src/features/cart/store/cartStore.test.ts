@@ -88,6 +88,18 @@ describe("cartStore", () => {
     expect(useCartStore.getState().pedidoState.total).toBe(15000);
   });
 
+  it("clears barrio data when no barrio is selected", () => {
+    const store = useCartStore.getState();
+
+    store.updateEntrega("barrio", "Centro");
+    store.selectBarrio({ id: 10, nombre: "Miramar", costoDomicilio: 5000 });
+    store.selectBarrio(null);
+
+    expect(useCartStore.getState().pedidoState.entrega.barrioID).toBeNull();
+    expect(useCartStore.getState().pedidoState.entrega.barrio).toBe("");
+    expect(useCartStore.getState().pedidoState.entrega.costoDomicilio).toBe(0);
+  });
+
   it("toggles billing data off and clears invoice fields", () => {
     const store = useCartStore.getState();
 

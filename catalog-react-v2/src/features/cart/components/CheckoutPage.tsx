@@ -3,15 +3,276 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { countryCodes } from "../../../shared/utils/countryCodes";
 import { formatCOP } from "../../../shared/utils/currency";
 import { buildTenantPath, resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
-import { createOrder, lookupClienteByTelefono, type CreateOrderRequest } from "../api/publicOrderApi";
+import {
+  createOrder,
+  lookupClienteByTelefono,
+  prepareWompiCheckout,
+  type CreateOrderRequest,
+  type CreateOrderResponse,
+  type PrepareWompiCheckoutResponse,
+  type WompiCheckoutPayload,
+} from "../api/publicOrderApi";
 import { CartItemsList } from "./CartItemsList";
 import { useCartStore } from "../store/cartStore";
 import type { AvailableBarrio, CartItem, PedidoState } from "../store/cartStore";
 import { usePublicBarrios } from "../../catalog/hooks/usePublicBarrios";
+import { getCatalogoPublico, type PublicPaymentMethod } from "../../catalog/api/publicCatalogApi";
 
 type WizardStep = 1 | 2 | 3 | 4;
 type PaymentMethod = "wompi" | "transferencia" | "efectivo";
+type CheckoutPaymentOption = {
+  value: PaymentMethod;
+  title: string;
+  caption: string;
+  cta: string;
+  subtitle: string;
+  badge?: string;
+  confirmationBullets?: string[];
+};
+type TransferAccount = {
+  id: string;
+  label: string;
+  number: string;
+};
 const SIGNATURE_PLACEHOLDER = "Anónimo";
+const TRANSFER_ACCOUNTS_COMPANY_ID = 2;
+const COMPANY_TRANSFER_ACCOUNTS: TransferAccount[] = [
+  { id: "nequi", label: "Nequi", number: "3001720582" },
+  { id: "daviplata", label: "Daviplata", number: "3128896624" },
+];
+const WOMPI_CHECKOUT_URL =
+  (import.meta.env.VITE_WOMPI_CHECKOUT_URL as string | undefined)?.trim() || "https://checkout.wompi.co/p/";
+
+function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function getPaymentUrl(response: CreateOrderResponse | PrepareWompiCheckoutResponse): string | null {
+  return firstNonEmpty(
+    response.paymentUrl,
+    response.payment_url,
+    response.checkoutUrl,
+    response.checkout_url,
+    response.wompiUrl,
+    response.wompi_url,
+    response.linkPago,
+    response.link_pago,
+  );
+}
+
+function getNextActionRedirectUrl(response: CreateOrderResponse): string | null {
+  const nextAction = response.next_action ?? response.nextAction;
+
+  if (nextAction?.type === "redirect") {
+    return firstNonEmpty(nextAction.redirect_url, nextAction.redirectUrl);
+  }
+
+  return firstNonEmpty(response.pago?.redirect_url, response.pago?.redirectUrl);
+}
+
+function getWompiCheckoutPayload(
+  response: CreateOrderResponse | PrepareWompiCheckoutResponse,
+): WompiCheckoutPayload | null {
+  return response.paymentPayload ?? response.payment_payload ?? response.wompiPayload ?? response.wompi_payload ?? null;
+}
+
+const DEFAULT_PAYMENT_OPTIONS: CheckoutPaymentOption[] = [
+  {
+    value: "wompi",
+    title: "WOMPI",
+    caption: "Pago online seguro con tarjeta y PSE",
+    cta: "PAGAR CON WOMPI",
+    subtitle: "Crear pedido y abrir pasarela",
+  },
+  {
+    value: "transferencia",
+    title: "Transferencia",
+    caption: "Confirma con comprobante por WhatsApp",
+    cta: "FINALIZAR PEDIDO",
+    subtitle: "Enviar comprobante luego",
+  },
+  {
+    value: "efectivo",
+    title: "Efectivo",
+    caption: "Pago contra entrega (si aplica)",
+    cta: "CONFIRMAR PEDIDO",
+    subtitle: "Registrar pedido",
+  },
+];
+
+function mapPublicPaymentMethods(methods: PublicPaymentMethod[]): CheckoutPaymentOption[] {
+  const mapped: CheckoutPaymentOption[] = [];
+
+  for (const method of methods) {
+    if (method.enabled === false) {
+      continue;
+    }
+
+    const value = normalizePaymentMethod(method.value ?? method.method ?? method.code ?? method.id);
+
+    if (!value) {
+      continue;
+    }
+
+    const fallback = DEFAULT_PAYMENT_OPTIONS.find((option) => option.value === value);
+    mapped.push({
+      value,
+      title: method.title?.trim() || method.label?.trim() || fallback?.title || value,
+      caption: method.caption?.trim() || method.description?.trim() || fallback?.caption || "",
+      cta: method.cta?.trim() || method.button?.trim() || fallback?.cta || "CONTINUAR",
+      subtitle: method.subtitle?.trim() || method.subtext?.trim() || fallback?.subtitle || "",
+      badge: method.badge?.trim() || (method.recommended ? "Recomendado" : undefined),
+      confirmationBullets: method.confirmation_bullets ?? method.confirmationBullets ?? fallback?.confirmationBullets,
+    });
+  }
+
+  return mapped.length > 0 ? mapped : DEFAULT_PAYMENT_OPTIONS;
+}
+
+function getEmpresaId(empresa: { id?: number | null; empresa_id?: number | null; empresaID?: number | null } | null): number | null {
+  return empresa?.id ?? empresa?.empresa_id ?? empresa?.empresaID ?? null;
+}
+
+function getTransferAccountsForCompany(empresaId: number | null): TransferAccount[] {
+  return empresaId === TRANSFER_ACCOUNTS_COMPANY_ID ? COMPANY_TRANSFER_ACCOUNTS : [];
+}
+
+function withTransferAccountFlow(
+  options: CheckoutPaymentOption[],
+  transferAccounts: TransferAccount[],
+): CheckoutPaymentOption[] {
+  if (transferAccounts.length === 0) {
+    return options;
+  }
+
+  const optionsWithTransfer = options.some((option) => option.value === "transferencia")
+    ? options
+    : [
+        ...options,
+        DEFAULT_PAYMENT_OPTIONS.find((option) => option.value === "transferencia") ?? DEFAULT_PAYMENT_OPTIONS[1],
+      ];
+
+  return optionsWithTransfer.map((option) =>
+    option.value === "transferencia"
+      ? {
+          ...option,
+          title: option.title || "Transferencia",
+          caption: "Paga por Nequi o Daviplata y envía el comprobante por WhatsApp",
+          cta: "FINALIZAR Y ENVIAR COMPROBANTE",
+          subtitle: "Te abriremos WhatsApp al finalizar",
+          confirmationBullets: [
+            "Elige Nequi o Daviplata y transfiere el total",
+            "Al finalizar podrás enviar el comprobante por WhatsApp",
+          ],
+        }
+      : option,
+  );
+}
+
+function normalizePaymentMethod(value: string | null | undefined): PaymentMethod | null {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "wompi" || normalized === "transferencia" || normalized === "efectivo") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function getPaymentReference(response: CreateOrderResponse): string | null {
+  return firstNonEmpty(
+    response.paymentReference,
+    response.payment_reference,
+    response.referenciaPago,
+    response.referencia_pago,
+    response.codigo_pedido,
+    response.codigoPedido,
+  );
+}
+
+function buildFallbackPaymentReference(pedidoID: number | null | undefined, codigoPedido: string | null): string {
+  if (codigoPedido?.trim()) {
+    return codigoPedido.trim();
+  }
+
+  if (typeof pedidoID === "number" && Number.isFinite(pedidoID) && pedidoID > 0) {
+    return `PED-${pedidoID}`;
+  }
+
+  return `PED-${Date.now().toString().slice(-8)}`;
+}
+
+function buildWompiCheckoutUrlFromPayload(payload: WompiCheckoutPayload | null): string | null {
+  if (!payload) {
+    return null;
+  }
+
+  const query = new URLSearchParams();
+  const normalizedPayload: Record<string, string | number | null | undefined> = {
+    ...payload,
+    "public-key": payload["public-key"] ?? payload.publicKey ?? payload.public_key,
+    "amount-in-cents": payload["amount-in-cents"] ?? payload.amountInCents ?? payload.amount_in_cents,
+    "signature:integrity":
+      payload["signature:integrity"] ?? payload.signatureIntegrity ?? payload.signature_integrity,
+    "redirect-url": payload["redirect-url"] ?? payload.redirectUrl ?? payload.redirect_url,
+    "expiration-time": payload["expiration-time"] ?? payload.expirationTime ?? payload.expiration_time,
+  };
+
+  for (const [key, value] of Object.entries(normalizedPayload)) {
+    if (value === null || value === undefined || value === "") {
+      continue;
+    }
+
+    query.set(toWompiCheckoutKey(key), String(value));
+  }
+
+  return query.has("public-key") && query.has("amount-in-cents") && query.has("reference") && query.has("signature:integrity")
+    ? `${WOMPI_CHECKOUT_URL}?${query.toString()}`
+    : null;
+}
+
+function toWompiCheckoutKey(key: string): string {
+  if (key === "signatureIntegrity" || key === "signature_integrity") {
+    return "signature:integrity";
+  }
+
+  return key.replace(/_/g, "-").replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+async function resolveWompiPaymentUrl(
+  tenantSlug: string,
+  orderResponse: CreateOrderResponse,
+): Promise<string | null> {
+  const directUrl = getPaymentUrl(orderResponse);
+
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const createOrderPayloadUrl = buildWompiCheckoutUrlFromPayload(
+    orderResponse.checkout ?? getWompiCheckoutPayload(orderResponse),
+  );
+
+  if (createOrderPayloadUrl) {
+    return createOrderPayloadUrl;
+  }
+
+  if (!orderResponse.pedidoID) {
+    return null;
+  }
+
+  const preparedCheckout = await prepareWompiCheckout(tenantSlug, orderResponse.pedidoID);
+  return getPaymentUrl(preparedCheckout) ?? buildWompiCheckoutUrlFromPayload(
+    preparedCheckout.checkout ?? getWompiCheckoutPayload(preparedCheckout),
+  );
+}
 
 interface WizardStepsProps {
   step: WizardStep;
@@ -44,6 +305,7 @@ interface DeliveryStepProps {
 interface MessageStepProps {
   pedidoState: PedidoState;
   canContinue: boolean;
+  requiresSignature: boolean;
   updateMensaje: (field: keyof PedidoState["mensaje"], value: string) => void;
   updateNotas: (value: string) => void;
   onNext: () => void;
@@ -59,6 +321,8 @@ interface ConfirmationStepProps {
   isSubmitting: boolean;
   submitError: string | null;
   paymentMethod: PaymentMethod;
+  paymentOptions: CheckoutPaymentOption[];
+  transferAccounts: TransferAccount[];
   isFlora: boolean;
   onPaymentChange: (value: PaymentMethod) => void;
   onBack: () => void;
@@ -110,11 +374,16 @@ export function isDeliveryStepComplete(entrega: PedidoState["entrega"]): boolean
     return hasValidDate;
   }
 
-  return hasValidDate && entrega.direccion.trim().length > 0 && entrega.barrio.trim().length > 0;
+  return (
+    hasValidDate &&
+    entrega.direccion.trim().length > 0 &&
+    entrega.barrioID !== null &&
+    entrega.barrio.trim().length > 0
+  );
 }
 
-export function isMessageStepComplete(mensaje: PedidoState["mensaje"]): boolean {
-  return mensaje.firma.trim().length > 0;
+export function isMessageStepComplete(mensaje: PedidoState["mensaje"], requiresSignature = true): boolean {
+  return !requiresSignature || mensaje.firma.trim().length > 0;
 }
 
 export function buildFloraWhatsappMessage(pedidoState: PedidoState, totalFinal: number): string {
@@ -337,8 +606,32 @@ function DeliveryStep({
   const [showBarrioOptions, setShowBarrioOptions] = useState(false);
 
   useEffect(() => {
-    setBarrioQuery(pedidoState.entrega.barrio);
-  }, [pedidoState.entrega.barrio]);
+    if (pedidoState.entrega.barrioID !== null && pedidoState.entrega.barrio.trim().length > 0) {
+      setBarrioQuery(pedidoState.entrega.barrio);
+    } else if (!isDomicilio) {
+      setBarrioQuery("");
+    }
+  }, [isDomicilio, pedidoState.entrega.barrio, pedidoState.entrega.barrioID]);
+
+  const filteredBarrios = useMemo(() => {
+    const query = barrioQuery.trim().toLowerCase();
+
+    if (!query) {
+      return availableBarrios.slice(0, 30);
+    }
+
+    return availableBarrios.filter((item) => item.nombre.toLowerCase().includes(query)).slice(0, 30);
+  }, [availableBarrios, barrioQuery]);
+
+  const exactMatch = useMemo(() => {
+    const query = barrioQuery.trim().toLowerCase();
+
+    if (!query) {
+      return null;
+    }
+
+    return availableBarrios.find((item) => item.nombre.trim().toLowerCase() === query) ?? null;
+  }, [availableBarrios, barrioQuery]);
 
   useEffect(() => {
     if (hasResetBlankDelivery.current || !isDomicilio) {
@@ -362,16 +655,6 @@ function DeliveryStep({
     updateEntrega("metodo", "domicilio");
     hasResetBlankDelivery.current = true;
   }, [isDomicilio, pedidoState.entrega, updateEntrega]);
-
-  const filteredBarrios = useMemo(() => {
-    const query = barrioQuery.trim().toLowerCase();
-
-    if (!query) {
-      return availableBarrios.slice(0, 30);
-    }
-
-    return availableBarrios.filter((item) => item.nombre.toLowerCase().includes(query)).slice(0, 30);
-  }, [availableBarrios, barrioQuery]);
 
   return (
     <section className="wizard-panel" aria-label="Informacion de entrega y mensaje">
@@ -469,52 +752,78 @@ function DeliveryStep({
                 <span>Barrios de Entrega *</span>
                 <div className="barrio-combobox">
                   <input
+                    className="barrio-combobox-input"
                     type="text"
                     value={barrioQuery}
                     onFocus={() => setShowBarrioOptions(true)}
                     onBlur={() => {
-                      window.setTimeout(() => setShowBarrioOptions(false), 120);
+                      window.setTimeout(() => {
+                        setShowBarrioOptions(false);
+                        if (!exactMatch && pedidoState.entrega.barrioID !== null) {
+                          setBarrioQuery(pedidoState.entrega.barrio);
+                        }
+                      }, 120);
                     }}
                     onChange={(event) => {
                       const value = event.target.value;
                       setBarrioQuery(value);
-                      updateEntrega("barrio", value);
-
-                      const exactMatch = availableBarrios.find(
-                        (item) => item.nombre.toLowerCase() === value.trim().toLowerCase(),
-                      );
-                      selectBarrio(exactMatch ?? null);
+                      setShowBarrioOptions(true);
+                      const matchedBarrio =
+                        availableBarrios.find((item) => item.nombre.trim().toLowerCase() === value.trim().toLowerCase()) ??
+                        null;
+                      selectBarrio(matchedBarrio);
                     }}
-                    placeholder="Ej: Miramar"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setShowBarrioOptions(false);
+                        return;
+                      }
+
+                      if (event.key === "Enter" && exactMatch) {
+                        event.preventDefault();
+                        selectBarrio(exactMatch);
+                        setBarrioQuery(exactMatch.nombre);
+                        setShowBarrioOptions(false);
+                      }
+                    }}
+                    placeholder="Busca tu barrio"
                     autoComplete="off"
                     required={isDomicilio}
                     aria-required={isDomicilio}
+                    aria-autocomplete="list"
+                    aria-expanded={showBarrioOptions}
+                    aria-controls="barrio-options-list"
                   />
-                  {showBarrioOptions && filteredBarrios.length > 0 ? (
-                    <div className="barrio-options" role="listbox" aria-label="Barrios disponibles">
-                      {filteredBarrios.map((barrio) => (
-                        <button
-                          key={`${barrio.id}-${barrio.nombre}`}
-                          type="button"
-                          className="barrio-option"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            selectBarrio(barrio);
-                            setBarrioQuery(barrio.nombre);
-                            setShowBarrioOptions(false);
-                          }}
-                        >
-                          <span>{barrio.nombre}</span>
-                          <strong>{formatCOP(barrio.costoDomicilio)}</strong>
-                        </button>
-                      ))}
+
+                  {showBarrioOptions ? (
+                    <div className="barrio-options" id="barrio-options-list" role="listbox" aria-label="Barrios disponibles">
+                      {filteredBarrios.length > 0 ? (
+                        filteredBarrios.map((barrio) => (
+                          <button
+                            key={`${barrio.id}-${barrio.nombre}`}
+                            type="button"
+                            className="barrio-option"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              selectBarrio(barrio);
+                              setBarrioQuery(barrio.nombre);
+                              setShowBarrioOptions(false);
+                            }}
+                          >
+                            <span>{barrio.nombre}</span>
+                            <strong>{formatCOP(barrio.costoDomicilio)}</strong>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="barrio-options-empty">No encontramos coincidencias registradas.</div>
+                      )}
                     </div>
                   ) : null}
                 </div>
                 <small className="checkout-field-help">
-                  {pedidoState.entrega.costoDomicilio > 0
+                  {pedidoState.entrega.barrioID !== null
                     ? `Costo de domicilio: ${formatCOP(pedidoState.entrega.costoDomicilio)}`
-                    : "Costo de domicilio: $0"}
+                    : "Escribe para filtrar y elige un barrio existente de la lista."}
                 </small>
               </label>
             </>
@@ -567,6 +876,7 @@ function DeliveryStep({
 function MessageStep({
   pedidoState,
   canContinue,
+  requiresSignature,
   updateMensaje,
   updateNotas,
   onNext,
@@ -598,15 +908,17 @@ function MessageStep({
           </label>
 
           <label className="checkout-field checkout-field-wide">
-            <span>Firma</span>
+            <span>{requiresSignature ? "Firma" : "Firma (opcional)"}</span>
             <input
               type="text"
               value={pedidoState.mensaje.firma}
               onChange={(event) => updateMensaje("firma", event.target.value)}
               placeholder={SIGNATURE_PLACEHOLDER}
-              required
+              required={requiresSignature}
             />
-            <small className="checkout-field-help">Si no deseas firmar, escribe {SIGNATURE_PLACEHOLDER}.</small>
+            {requiresSignature ? (
+              <small className="checkout-field-help">Si no deseas firmar, escribe {SIGNATURE_PLACEHOLDER}.</small>
+            ) : null}
           </label>
         </div>
       </section>
@@ -648,18 +960,31 @@ function ConfirmationStep({
   isSubmitting,
   submitError,
   paymentMethod,
+  paymentOptions,
+  transferAccounts,
   isFlora,
   onPaymentChange,
   onBack,
   onConfirm,
 }: Readonly<ConfirmationStepProps>) {
-  const paymentOptions: Array<{ value: PaymentMethod; title: string; caption: string }> = [
-    { value: "wompi", title: "WOMPI", caption: "Pago online seguro con tarjeta y PSE" },
-    { value: "transferencia", title: "Transferencia", caption: "Confirma con comprobante por WhatsApp" },
-    { value: "efectivo", title: "Efectivo", caption: "Pago contra entrega (si aplica)" },
-  ];
-  const confirmTitle = isFlora ? "CONFIRMAR PEDIDO" : "FINALIZAR PEDIDO";
-  const confirmSubtitle = isFlora ? "Continuar en WhatsApp" : "Continuar al pago";
+  const [copiedTransferAccount, setCopiedTransferAccount] = useState<string | null>(null);
+  const selectedPaymentOption =
+    paymentOptions.find((option) => option.value === paymentMethod) ??
+    DEFAULT_PAYMENT_OPTIONS.find((option) => option.value === paymentMethod);
+  const confirmTitle = isFlora
+    ? "CONFIRMAR PEDIDO"
+    : selectedPaymentOption?.cta ?? "CONTINUAR";
+  const confirmSubtitle = isFlora
+    ? "Continuar en WhatsApp"
+    : selectedPaymentOption?.subtitle ?? "";
+  const confirmationBullets =
+    selectedPaymentOption?.confirmationBullets ??
+    (paymentMethod === "wompi"
+      ? ["Crearemos tu pedido antes de abrir Wompi", "El pago se valida de forma segura"]
+      : paymentMethod === "transferencia"
+        ? ["Podrás enviar el comprobante por WhatsApp al finalizar"]
+        : ["El pago queda marcado para gestionarse contra entrega"]);
+  const selectedPaymentTitle = selectedPaymentOption?.title ?? "";
 
   const deliveryLabel =
     pedidoState.entrega.metodo === "domicilio" ? "Domicilio" : "Recoger en tienda";
@@ -669,6 +994,16 @@ function ConfirmationStep({
   const addressLine = formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento);
   const timeRangeLine = pedidoState.entrega.rangoHora.trim();
   const hasMessage = pedidoState.mensaje.texto.trim().length > 0 || pedidoState.mensaje.firma.trim().length > 0;
+  const showTransferAccounts = paymentMethod === "transferencia" && transferAccounts.length > 0;
+
+  async function handleCopyTransferAccount(account: TransferAccount) {
+    try {
+      await navigator.clipboard.writeText(account.number);
+      setCopiedTransferAccount(account.id);
+    } catch {
+      setCopiedTransferAccount(null);
+    }
+  }
 
   return (
     <section className="wizard-panel" aria-label="Resumen final del pedido">
@@ -762,33 +1097,76 @@ function ConfirmationStep({
 
       <section className="checkout-trust">
         <p>✔ Tu pedido quedará registrado automáticamente</p>
-        <p>{isFlora ? "✔ Te enviaremos la información de pago por WhatsApp" : "✔ Te enviaremos la información de pago por WhatsApp"}</p>
+        {(isFlora ? ["Te enviaremos la información de pago por WhatsApp"] : confirmationBullets).map((bullet) => (
+          <p key={bullet}>✔ {bullet}</p>
+        ))}
       </section>
 
       {isFlora ? null : (
         <section className="checkout-card payment-card">
-          <h2>Metodo de pago</h2>
+          <div className="payment-card-head">
+            <div>
+              <h2>Metodo de pago</h2>
+              <p>{selectedPaymentTitle ? `Seleccionado: ${selectedPaymentTitle}` : "Elige como quieres pagar."}</p>
+            </div>
+            {paymentMethod === "wompi" ? <span className="payment-secure-pill">Pago seguro</span> : null}
+          </div>
           <div className="payment-methods" role="radiogroup" aria-label="Metodo de pago">
             {paymentOptions.map((option) => {
               const isTransfer = option.value === "transferencia";
               const isSelected = paymentMethod === option.value;
+              const isWompi = option.value === "wompi";
 
               return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`payment-option ${isSelected ? "payment-option-active" : ""}`}
-                  onClick={() => onPaymentChange(option.value)}
-                  aria-pressed={isSelected}
-                >
-                  <strong>{option.title}</strong>
-                  <span>{option.caption}</span>
-                  {isTransfer ? (
-                    <small className="checkout-field-help">
-                      Verifica el comprobante por WhatsApp antes de confirmar.
-                    </small>
+                <div key={option.value} className="payment-option-block">
+                  <button
+                    type="button"
+                    className={`payment-option ${isWompi ? "payment-option-wompi" : ""} ${isSelected ? "payment-option-active" : ""}`}
+                    onClick={() => onPaymentChange(option.value)}
+                    aria-pressed={isSelected}
+                  >
+                    <span className="payment-option-topline">
+                      <strong>{option.title}</strong>
+                      {option.badge ? <span className="payment-badge">{option.badge}</span> : null}
+                    </span>
+                    <span>{option.caption}</span>
+                    {isWompi ? (
+                      <small className="checkout-field-help">
+                        Se abrirá Wompi después de registrar el pedido.
+                      </small>
+                    ) : null}
+                    {isTransfer ? (
+                      <small className="checkout-field-help">
+                        Verifica el comprobante por WhatsApp antes de confirmar.
+                      </small>
+                    ) : null}
+                  </button>
+                  {isTransfer && showTransferAccounts ? (
+                    <div className="transfer-inline-card" aria-live="polite">
+                      <div>
+                        <h3>Datos para transferir</h3>
+                        <p className="transfer-inline-helper">
+                          Transfiere el total exacto y conserva el comprobante para enviarlo por WhatsApp.
+                        </p>
+                      </div>
+                      <div className="payment-data-list">
+                        {transferAccounts.map((account) => (
+                          <p key={account.id}>
+                            <span>{account.label}</span>
+                            <strong>{account.number}</strong>
+                            <button
+                              type="button"
+                              className="ghost payment-copy-button"
+                              onClick={() => void handleCopyTransferAccount(account)}
+                            >
+                              {copiedTransferAccount === account.id ? "Copiado" : "Copiar"}
+                            </button>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -807,8 +1185,12 @@ function ConfirmationStep({
           onClick={onConfirm}
           disabled={isSubmitting}
         >
-          <span className="confirmation-primary-title">{confirmTitle}</span>
-          <span className="cart-action-subtitle">{confirmSubtitle}</span>
+          <span className="confirmation-primary-title">
+            {isSubmitting && paymentMethod === "wompi" ? "ABRIENDO WOMPI" : confirmTitle}
+          </span>
+          <span className="cart-action-subtitle">
+            {isSubmitting ? "Registrando pedido..." : confirmSubtitle}
+          </span>
         </button>
       </div>
     </section>
@@ -823,6 +1205,8 @@ export function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wompi");
+  const [paymentOptions, setPaymentOptions] = useState<CheckoutPaymentOption[]>(DEFAULT_PAYMENT_OPTIONS);
+  const [empresaId, setEmpresaId] = useState<number | null>(null);
   const [customerLookupStatus, setCustomerLookupStatus] = useState<"idle" | "loading" | "found" | "not_found" | "error">(
     "idle",
   );
@@ -848,13 +1232,14 @@ export function CheckoutPage() {
     resolvedTenantSlug.trim().toLowerCase() === "flora" && pedidoState.cliente.facturacion.tipoIdentificacion === "nit";
   const totalIVA = aplicaIvaNit ? Math.round(pedidoState.subtotal * 0.19) : 0;
   const totalFinal = pedidoState.subtotal + costoDomicilio + totalIVA;
+  const requiresMessageSignature = (empresaId ?? (isFlora ? 3 : null)) === 3;
 
   const canContinueStep1 =
     pedidoState.cliente.nombre.trim().length > 1 &&
     pedidoState.cliente.telefono.trim().length >= 7 &&
     pedidoState.cliente.facturacion.identificacion.trim().length > 0;
   const canContinueStep2 = isDeliveryStepComplete(pedidoState.entrega);
-  const canContinueStep3 = isMessageStepComplete(pedidoState.mensaje);
+  const canContinueStep3 = isMessageStepComplete(pedidoState.mensaje, requiresMessageSignature);
 
   const stepTitles = useMemo(() => ["Información del cliente", "Información de entrega", "Mensaje", "Confirmar"], []);
 
@@ -865,6 +1250,47 @@ export function CheckoutPage() {
   useEffect(() => {
     setAvailableBarrios(barrios);
   }, [barrios, setAvailableBarrios]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentMethods() {
+      if (!resolvedTenantSlug || isFlora) {
+        setPaymentOptions(DEFAULT_PAYMENT_OPTIONS);
+        setEmpresaId(null);
+        return;
+      }
+
+      try {
+        const catalog = await getCatalogoPublico(resolvedTenantSlug);
+        const nextEmpresaId = getEmpresaId(catalog.empresa);
+        const transferAccounts = getTransferAccountsForCompany(nextEmpresaId);
+        const mappedOptions = withTransferAccountFlow(
+          mapPublicPaymentMethods(catalog.payment_methods ?? []),
+          transferAccounts,
+        );
+
+        if (!cancelled) {
+          setEmpresaId(nextEmpresaId);
+          setPaymentOptions(mappedOptions);
+          if (!mappedOptions.some((option) => option.value === paymentMethod)) {
+            setPaymentMethod(mappedOptions[0]?.value ?? "wompi");
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setEmpresaId(null);
+          setPaymentOptions(DEFAULT_PAYMENT_OPTIONS);
+        }
+      }
+    }
+
+    void loadPaymentMethods();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isFlora, paymentMethod, resolvedTenantSlug]);
 
   useEffect(() => {
     if (!safeIndicativo) {
@@ -956,6 +1382,11 @@ export function CheckoutPage() {
     setCustomerLookupStatus("idle");
   }
 
+  function handlePaymentChange(value: PaymentMethod) {
+    setPaymentMethod(value);
+    setSubmitError(null);
+  }
+
   async function handleConfirmOrder() {
     if (!resolvedTenantSlug) {
       setSubmitError("No pudimos identificar el tenant de este pedido. Vuelve al catalogo e intenta de nuevo.");
@@ -972,13 +1403,13 @@ export function CheckoutPage() {
       setStep(2);
       setSubmitError(
         pedidoState.entrega.metodo === "domicilio"
-          ? "Completa la direccion principal y el barrio de entrega antes de confirmar el pedido."
+          ? "Completa la direccion principal y selecciona un barrio de la lista antes de confirmar el pedido."
           : "Completa los datos de entrega antes de confirmar el pedido.",
       );
       return;
     }
 
-    if (!isMessageStepComplete(pedidoState.mensaje)) {
+    if (!isMessageStepComplete(pedidoState.mensaje, requiresMessageSignature)) {
       setStep(3);
       setSubmitError(`Completa la firma del mensaje. Si prefieres no firmar, escribe ${SIGNATURE_PLACEHOLDER}.`);
       return;
@@ -1135,7 +1566,30 @@ export function CheckoutPage() {
       const response = await createOrder(resolvedTenantSlug, orderPayload);
 
       const codigoPedido = response.codigo_pedido ?? response.codigoPedido ?? null;
-      const order = submitOrder(resolvedTenantSlug, response.pedidoID, codigoPedido, totalFinal, totalIVA, effectivePaymentMethod);
+      const paymentReference =
+        getPaymentReference(response) ?? buildFallbackPaymentReference(response.pedidoID, codigoPedido);
+      const responseNextActionUrl = getNextActionRedirectUrl(response);
+      const paymentUrl =
+        effectivePaymentMethod === "wompi"
+          ? responseNextActionUrl ?? await resolveWompiPaymentUrl(resolvedTenantSlug, response)
+          : null;
+      if (effectivePaymentMethod === "wompi" && !paymentUrl) {
+        setSubmitError(
+          "Wompi no esta configurado en el backend. El backend debe devolver checkout_url o checkout/payment_payload firmado.",
+        );
+        return;
+      }
+
+      const order = submitOrder(
+        resolvedTenantSlug,
+        response.pedidoID,
+        codigoPedido,
+        totalFinal,
+        totalIVA,
+        effectivePaymentMethod,
+        paymentUrl,
+        paymentReference,
+      );
 
       if (!order) {
         setSubmitError("No fue posible confirmar el pedido. Intenta de nuevo.");
@@ -1147,13 +1601,20 @@ export function CheckoutPage() {
         return;
       }
 
+      if (effectivePaymentMethod === "wompi" && paymentUrl) {
+        window.location.assign(paymentUrl);
+        return;
+      }
+
       navigate(successPath, { replace: true });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "No fue posible registrar el pedido en este momento.");
-    } finally {
+  } finally {
       setIsSubmitting(false);
     }
   }
+
+  const transferAccounts = getTransferAccountsForCompany(empresaId);
 
   if (!resolvedTenantSlug) {
     return (
@@ -1221,6 +1682,7 @@ export function CheckoutPage() {
         <MessageStep
           pedidoState={pedidoState}
           canContinue={canContinueStep3}
+          requiresSignature={requiresMessageSignature}
           updateMensaje={updateMensaje}
           updateNotas={updateNotas}
           onNext={goNext}
@@ -1238,7 +1700,9 @@ export function CheckoutPage() {
           isSubmitting={isSubmitting}
           submitError={submitError}
           paymentMethod={paymentMethod}
-          onPaymentChange={setPaymentMethod}
+          paymentOptions={paymentOptions}
+          transferAccounts={transferAccounts}
+          onPaymentChange={handlePaymentChange}
           onBack={goBack}
           isFlora={isFlora}
           onConfirm={() => void handleConfirmOrder()}

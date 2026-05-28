@@ -1,36 +1,35 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
+import type { Producto } from "../../../shared/types/catalog";
 import { useCartStore } from "../../cart/store/cartStore";
 import { formatCOP } from "../../../shared/utils/currency";
+import { resolveProductImageCandidates } from "../utils/cloudfront";
 
 interface ProductCardProps {
-  id: number;
-  nombre: string;
-  codigoProducto?: string;
-  precio: number;
-  imagenUrl: string;
-  categoria: number | string;
+  product: Producto;
   companyColor: string;
   onOpenDetail: () => void;
 }
 
-const FALLBACK_IMAGE = "/product-placeholder.svg";
+const IMAGE_WIDTH = 320;
+const IMAGE_HEIGHT = 400;
 
-export const ProductCard = memo(function ProductCard({
-  id,
-  nombre,
-  codigoProducto,
-  precio,
-  imagenUrl,
-  categoria,
-  companyColor,
-  onOpenDetail,
-}: ProductCardProps) {
+export const ProductCard = memo(function ProductCard({ product, companyColor, onOpenDetail }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const [isImageLoading, setIsImageLoading] = useState(true);
-  const [hasImageError, setHasImageError] = useState(false);
+  const [imageIndex, setImageIndex] = useState(0);
 
-  const imageSrc = hasImageError ? FALLBACK_IMAGE : imagenUrl;
-  const normalizedCategory = String(categoria).trim();
+  const imageCandidates = useMemo(
+    () => resolveProductImageCandidates(product, "", "sm"),
+    [product.imagen, product.imagen_lg, product.imagen_md, product.imagen_sm, product.imagen_url],
+  );
+
+  useEffect(() => {
+    setImageIndex(0);
+    setIsImageLoading(true);
+  }, [product.id, imageCandidates]);
+
+  const imageSrc = imageCandidates[imageIndex] ?? "/product-placeholder.svg";
+  const normalizedCategory = String(product.categoriaNombre ?? product.categoriaID ?? "").trim();
   const categoryLabel = normalizedCategory ? normalizedCategory : "Sin categoria";
 
   return (
@@ -39,7 +38,7 @@ export const ProductCard = memo(function ProductCard({
         className="product-media block w-full"
         type="button"
         onClick={onOpenDetail}
-        aria-label={`Ver detalle de ${nombre}`}
+        aria-label={`Ver detalle de ${product.nombre}`}
       >
         <div className="product-media-frame rounded-t-xl">
           {isImageLoading ? <span className="product-skeleton" aria-hidden="true" /> : null}
@@ -47,12 +46,15 @@ export const ProductCard = memo(function ProductCard({
           <img
             className="product-image rounded-t-xl"
             src={imageSrc}
-            alt={nombre}
+            alt={product.nombre}
+            width={IMAGE_WIDTH}
+            height={IMAGE_HEIGHT}
             loading="lazy"
+            decoding="async"
             onLoad={() => setIsImageLoading(false)}
             onError={() => {
-              setHasImageError(true);
-              setIsImageLoading(false);
+              setImageIndex((currentIndex) => Math.min(currentIndex + 1, imageCandidates.length - 1));
+              setIsImageLoading(true);
             }}
           />
         </div>
@@ -62,9 +64,9 @@ export const ProductCard = memo(function ProductCard({
         <p className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-600">
           Categoria {categoryLabel}
         </p>
-        <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{nombre}</h3>
-        {codigoProducto ? <p className="text-xs font-medium text-slate-500">Codigo: {codigoProducto}</p> : null}
-        <p className="text-slate-900 font-semibold">{formatCOP(precio)}</p>
+        <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{product.nombre}</h3>
+        {product.codigo_producto ? <p className="text-xs font-medium text-slate-500">Codigo: {product.codigo_producto}</p> : null}
+        <p className="text-slate-900 font-semibold">{formatCOP(product.precio)}</p>
 
         <button
           type="button"
@@ -72,10 +74,10 @@ export const ProductCard = memo(function ProductCard({
           style={{ backgroundColor: companyColor }}
           onClick={() =>
             addItem({
-              id,
-              nombre,
-              precio,
-              imagen: imagenUrl,
+              id: product.id,
+              nombre: product.nombre,
+              precio: product.precio,
+              imagen: product.imagen,
             })
           }
         >

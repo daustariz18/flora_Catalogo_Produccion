@@ -14,10 +14,10 @@ describe("catalogDisplay", () => {
 
     expect(sortCategoriesForDisplay(categories).map((category) => category.nombre)).toEqual([
       "Arreglos personalizados",
-      "Flora Madres",
       "Flora Box",
       "Condolencias",
       "Adicionales",
+      "Flora Madres",
     ]);
   });
 
@@ -44,8 +44,8 @@ describe("catalogDisplay", () => {
 
     expect(sortProductsForDisplay(products).map((product) => product.nombre)).toEqual([
       "Arreglo Personalizado Deluxe",
-      "Arreglo Madre 2026",
       "Rosa Roja",
+      "Arreglo Madre 2026",
     ]);
   });
 
@@ -201,7 +201,6 @@ describe("catalogDisplay", () => {
 
     expect(sortCategoriesForDisplay(categories).map((category) => category.nombre)).toEqual([
       "Personalizado",
-      "Flora Madres",
       "Flora Box",
       "Flora Canastos",
       "Flora Bouquets",
@@ -216,10 +215,10 @@ describe("catalogDisplay", () => {
       "Bodas",
       "Dia Mujer",
       "Evento",
+      "Flora Madres",
     ]);
     expect(sortProductsForDisplay(products).map((product) => product.nombre)).toEqual([
       "Producto Personalizado",
-      "Producto Madre",
       "Producto Flora Box",
       "Producto Canastos",
       "Producto Bouquets",
@@ -234,6 +233,7 @@ describe("catalogDisplay", () => {
       "Producto Bodas",
       "Producto Dia Mujer",
       "Producto Evento",
+      "Producto Madre",
     ]);
   });
 });

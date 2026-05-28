@@ -37,7 +37,10 @@ export function OrderSuccessPage() {
   const subtotalProductos = order.pedido.subtotal;
   const envio = Math.max(0, order.totalPrice - subtotalProductos - order.totalIVA);
   const isTransferPending = order.paymentStatus === "pendiente_validacion";
-  const transferWhatsappHref = `https://wa.me/573128896624?text=${encodeURIComponent(
+  const isWompi = order.paymentMethod === "wompi";
+  const isWompiPending = order.paymentStatus === "pendiente_pago";
+  const paymentLabel = getPaymentMethodLabel(order.paymentMethod);
+  const transferWhatsappHref = `https://wa.me/${getPaymentWhatsappNumber()}?text=${encodeURIComponent(
     `Hola, comparto comprobante de pago del pedido ${order.id}. Cliente: ${order.pedido.cliente.nombre}. Total: ${formatCOP(order.totalPrice)}.`,
   )}`;
 
@@ -69,12 +72,18 @@ export function OrderSuccessPage() {
   return (
     <main className="cart-page success-page">
       <section className="success-card">
-        <p className="success-kicker">{isTransferPending ? "Pedido recibido" : "Pedido confirmado"}</p>
+        <p className="success-kicker">
+          {isTransferPending || isWompiPending ? "Pedido recibido" : "Pedido confirmado"}
+        </p>
         <h1>{order.id}</h1>
         <p className="success-copy">
           {isTransferPending
             ? "Recibimos tu pedido. Queda pendiente de validacion del comprobante de transferencia."
-            : "El pedido quedo listo en la app. Puedes copiar el resumen para compartirlo o seguir comprando."}
+            : isWompi
+              ? order.paymentUrl
+                ? "Tu pedido quedo registrado. Puedes continuar al pago online de Wompi si la ventana no se abrio automaticamente."
+                : "Tu pedido quedo registrado con metodo de pago Wompi."
+              : "El pedido quedo listo en la app. Puedes copiar el resumen para compartirlo o seguir comprando."}
         </p>
 
         {order.pedidoID ? <p className="success-api-id">Pedido registrado: #{order.pedidoID}</p> : null}
@@ -106,6 +115,16 @@ export function OrderSuccessPage() {
             <span>Total</span>
             <strong>{formatCOP(order.totalPrice)}</strong>
           </p>
+          <p>
+            <span>Metodo de pago</span>
+            <strong>{paymentLabel}</strong>
+          </p>
+          {order.paymentReference ? (
+            <p>
+              <span>Referencia de pago</span>
+              <strong>{order.paymentReference}</strong>
+            </p>
+          ) : null}
         </div>
 
         <div className="checkout-items">
@@ -121,6 +140,11 @@ export function OrderSuccessPage() {
         </div>
 
         <div className="success-actions">
+          {isWompi && order.paymentUrl ? (
+            <a className="cta success-link" href={order.paymentUrl} target="_blank" rel="noreferrer">
+              Continuar pago en Wompi
+            </a>
+          ) : null}
           {isTransferPending ? (
             <a className="cta success-link" href={transferWhatsappHref} target="_blank" rel="noreferrer">
               Enviar comprobante por WhatsApp
@@ -139,4 +163,21 @@ export function OrderSuccessPage() {
       </section>
     </main>
   );
+}
+
+function getPaymentMethodLabel(method: SubmittedOrder["paymentMethod"]): string {
+  if (method === "wompi") {
+    return "WOMPI";
+  }
+
+  if (method === "transferencia") {
+    return "Transferencia";
+  }
+
+  return "Efectivo";
+}
+
+function getPaymentWhatsappNumber(): string {
+  const configured = (import.meta.env.VITE_TRANSFER_WHATSAPP_PHONE as string | undefined)?.replace(/\D/g, "");
+  return configured || "573128896624";
 }

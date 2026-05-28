@@ -1,14 +1,13 @@
 import { useMemo } from "react";
-import type { Categoria, Producto } from "../../../shared/types/catalog";
+import type { Producto } from "../../../shared/types/catalog";
 import { ProductCard } from "./ProductCard";
-import { matchesCatalogSearch, sortProductsForDisplay } from "../utils/catalogDisplay";
+import { sortProductsForDisplay } from "../utils/catalogDisplay";
 
 interface ProductGridProps {
   products: Producto[];
-  categories?: Categoria[];
-  searchQuery: string;
   companyColor: string;
   onOpenDetail: (product: Producto) => void;
+  emptyMessage: string;
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
@@ -16,26 +15,21 @@ interface ProductGridProps {
 
 export function ProductGrid({
   products,
-  categories = [],
-  searchQuery,
   companyColor,
   onOpenDetail,
+  emptyMessage,
   hasMore = false,
   isLoadingMore = false,
   onLoadMore,
 }: ProductGridProps) {
   const filteredProducts = useMemo(() => {
-    let result = sortProductsForDisplay(products);
-    if (searchQuery.trim()) {
-      result = result.filter((product) => matchesCatalogSearch(product, searchQuery, categories));
-    }
-    return result;
-  }, [categories, products, searchQuery]);
+    return sortProductsForDisplay(products);
+  }, [products]);
 
   if (!filteredProducts.length) {
     return (
       <div className="catalog-empty-state">
-        <p className="empty-state">No encontramos arreglos para esta seleccion.</p>
+        <p className="empty-state">{emptyMessage}</p>
         {hasMore && onLoadMore ? (
           <button type="button" className="ghost catalog-load-more" onClick={onLoadMore} disabled={isLoadingMore}>
             {isLoadingMore ? "Cargando..." : "Cargar mas"}
@@ -51,12 +45,7 @@ export function ProductGrid({
         {filteredProducts.map((product) => (
           <ProductCard
             key={product.id}
-            id={product.id}
-            nombre={product.nombre}
-            codigoProducto={product.codigo_producto ?? product.codigoProduct}
-            precio={product.precio}
-            imagenUrl={product.imagen}
-            categoria={product.categoriaNombre ?? product.id_categoria ?? product.categoriaID}
+            product={product}
             companyColor={companyColor}
             onOpenDetail={() => onOpenDetail(product)}
           />

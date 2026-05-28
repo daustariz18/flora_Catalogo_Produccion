@@ -13,6 +13,9 @@ export type PublicProducto = {
   precio: string | number;
   descripcion: string | null;
   imagen_url: string | null;
+  imagen_sm?: string | null;
+  imagen_md?: string | null;
+  imagen_lg?: string | null;
   nombre_categoria?: string | null;
   categoria_nombre?: string | null;
   categoria?: {
@@ -29,6 +32,8 @@ export type PublicBarrio = {
 
 export type PublicEmpresa = {
   id?: number;
+  empresa_id?: number | null;
+  empresaID?: number | null;
   slug?: string | null;
   nombre: string;
   logoUrl?: string | null;
@@ -56,6 +61,30 @@ export type PublicEmpresa = {
 export type PublicCategoria = {
   id: number;
   nombre: string;
+  active?: boolean | null;
+  activo?: boolean | null;
+  enabled?: boolean | null;
+  estado?: string | null;
+};
+
+export type PublicPaymentMethod = {
+  value?: string | null;
+  method?: string | null;
+  code?: string | null;
+  id?: string | null;
+  title?: string | null;
+  label?: string | null;
+  caption?: string | null;
+  description?: string | null;
+  cta?: string | null;
+  button?: string | null;
+  subtitle?: string | null;
+  subtext?: string | null;
+  badge?: string | null;
+  recommended?: boolean | null;
+  enabled?: boolean | null;
+  confirmation_bullets?: string[] | null;
+  confirmationBullets?: string[] | null;
 };
 
 export type PublicCatalogoResponse = {
@@ -64,6 +93,7 @@ export type PublicCatalogoResponse = {
   productos: PublicProducto[];
   catalogo?: PublicProducto[];
   barrios: PublicBarrio[];
+  payment_methods?: PublicPaymentMethod[];
 };
 
 type PublicCatalogRawResponse =
@@ -87,6 +117,8 @@ type PublicCatalogRawResponse =
               }
           >
         | null;
+      payment_methods?: PublicPaymentMethod[] | null;
+      paymentMethods?: PublicPaymentMethod[] | null;
     };
 
 export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCatalogoResponse> {
@@ -101,6 +133,7 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCata
       categorias: [],
       productos: payload,
       barrios: [],
+      payment_methods: [],
     };
   }
 
@@ -109,10 +142,27 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCata
 
   return {
     empresa: payload.empresa ?? null,
-    categorias: payload.categorias ?? [],
+    categorias: normalizeCategorias(payload.categorias ?? []),
     productos,
     barrios,
+    payment_methods: payload.payment_methods ?? payload.paymentMethods ?? [],
   };
+}
+
+function normalizeCategorias(items: PublicCategoria[]): PublicCategoria[] {
+  return items.filter((item) => {
+    const status = item.estado?.trim().toLowerCase();
+
+    return (
+      item.activo !== false &&
+      item.active !== false &&
+      item.enabled !== false &&
+      status !== "inactiva" &&
+      status !== "inactivo" &&
+      status !== "inactive" &&
+      status !== "disabled"
+    );
+  });
 }
 
 function pickPublicProducts(payload: Exclude<PublicCatalogRawResponse, PublicProducto[]>): PublicProducto[] {

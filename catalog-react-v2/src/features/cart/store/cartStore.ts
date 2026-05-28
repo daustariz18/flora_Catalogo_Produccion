@@ -69,7 +69,9 @@ export interface SubmittedOrder {
   totalIVA: number;
   totalPrice: number;
   paymentMethod: "wompi" | "transferencia" | "efectivo";
-  paymentStatus: "confirmado" | "pendiente_validacion";
+  paymentStatus: "confirmado" | "pendiente_validacion" | "pendiente_pago";
+  paymentUrl?: string | null;
+  paymentReference?: string | null;
 }
 
 interface CartStore {
@@ -101,6 +103,8 @@ interface CartStore {
     totalPriceOverride?: number,
     totalIVA?: number,
     paymentMethod?: "wompi" | "transferencia" | "efectivo",
+    paymentUrl?: string | null,
+    paymentReference?: string | null,
   ) => SubmittedOrder | null;
   clearLastSubmittedOrder: () => void;
   setAvailableBarrios: (barrios: AvailableBarrio[]) => void;
@@ -308,7 +312,7 @@ export const useCartStore = create<CartStore>()(
             entrega: {
               ...state.pedidoState.entrega,
               barrioID: barrio?.id ?? null,
-              barrio: barrio?.nombre ?? state.pedidoState.entrega.barrio,
+              barrio: barrio?.nombre ?? "",
               costoDomicilio: barrio?.costoDomicilio ?? 0,
             },
           }),
@@ -338,6 +342,8 @@ export const useCartStore = create<CartStore>()(
         totalPriceOverride,
         totalIVA = 0,
         paymentMethod = "wompi",
+        paymentUrl = null,
+        paymentReference = null,
       ) => {
         const { pedidoState } = get();
 
@@ -358,7 +364,14 @@ export const useCartStore = create<CartStore>()(
               ? totalPriceOverride
               : pedidoState.total,
           paymentMethod,
-          paymentStatus: paymentMethod === "transferencia" ? "pendiente_validacion" : "confirmado",
+          paymentStatus:
+            paymentMethod === "transferencia"
+              ? "pendiente_validacion"
+              : paymentMethod === "wompi"
+                ? "pendiente_pago"
+                : "confirmado",
+          paymentUrl,
+          paymentReference,
         };
 
         set({

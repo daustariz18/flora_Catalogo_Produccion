@@ -68,6 +68,28 @@ describe("publicCatalogApi", () => {
     expect(result.productos[0]?.codigo_producto).toBe("FLORA-0001");
   });
 
+  it("filters inactive categories from the public catalog payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse({
+        empresa: { nombre: "Floreria Rosa" },
+        categorias: [
+          { id: 1, nombre: "Ramos", activo: true },
+          { id: 2, nombre: "Oculta", activo: false },
+          { id: 3, nombre: "Deshabilitada", enabled: false },
+          { id: 4, nombre: "Inactiva", estado: "inactive" },
+        ],
+        productos: [],
+        catalogo: [],
+        barrios: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getCatalogoPublico("flora");
+
+    expect(result.categorias).toEqual([{ id: 1, nombre: "Ramos", activo: true }]);
+  });
+
   it("throws a helpful error when the production host returns an html 404", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       createJsonResponse("<html>Not found</html>", {

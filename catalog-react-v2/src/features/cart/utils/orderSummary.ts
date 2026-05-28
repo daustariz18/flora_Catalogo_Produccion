@@ -12,8 +12,20 @@ export function buildOrderSummary(order: SubmittedOrder): string {
     `Metodo de pago: ${order.paymentMethod}`,
   ];
 
+  if (order.paymentReference) {
+    lines.push(`Referencia de pago: ${order.paymentReference}`);
+  }
+
+  if (order.paymentUrl) {
+    lines.push(`Link de pago: ${order.paymentUrl}`);
+  }
+
   if (order.paymentStatus === "pendiente_validacion") {
     lines.push("Estado de pago: Pendiente de validacion");
+  }
+
+  if (order.paymentStatus === "pendiente_pago") {
+    lines.push("Estado de pago: Pendiente de pago");
   }
 
   if (order.pedido.cliente.facturacion.requiereFactura) {

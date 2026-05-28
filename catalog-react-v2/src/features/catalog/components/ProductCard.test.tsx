@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { Producto } from "../../../shared/types/catalog";
 
 const mocks = vi.hoisted(() => ({
   addItem: vi.fn(),
@@ -15,21 +16,21 @@ import { ProductCard } from "./ProductCard";
 describe("ProductCard", () => {
   it("opens details and adds the product to the cart", () => {
     const onOpenDetail = vi.fn();
+    const product: Producto = {
+      id: 5,
+      nombre: "Ramo Primavera",
+      codigo_producto: "FLORA-0001",
+      precio: 25000,
+      imagen: "/ramo.png",
+      imagen_sm: "/ramo-sm.png",
+      categoriaID: 1,
+      categoriaNombre: "Primavera",
+    };
 
-    render(
-      <ProductCard
-        id={5}
-        nombre="Ramo Primavera"
-        codigoProducto="FLORA-0001"
-        precio={25000}
-        imagenUrl="/ramo.png"
-        categoria="Primavera"
-        companyColor="#123456"
-        onOpenDetail={onOpenDetail}
-      />,
-    );
+    render(<ProductCard product={product} companyColor="#123456" onOpenDetail={onOpenDetail} />);
 
     expect(screen.getByText("Codigo: FLORA-0001")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Ramo Primavera" })).toHaveAttribute("src", expect.stringContaining("/ramo-sm.png"));
     fireEvent.click(screen.getByRole("button", { name: "Ver detalle de Ramo Primavera" }));
     fireEvent.click(screen.getByRole("button", { name: "Anadir al carrito" }));
 
@@ -45,11 +46,14 @@ describe("ProductCard", () => {
   it("does not render the code when the backend does not send it", () => {
     render(
       <ProductCard
-        id={6}
-        nombre="Ramo Sin Codigo"
-        precio={20000}
-        imagenUrl="/ramo.png"
-        categoria="Ramos"
+        product={{
+          id: 6,
+          nombre: "Ramo Sin Codigo",
+          precio: 20000,
+          imagen: "/ramo.png",
+          categoriaID: 2,
+          categoriaNombre: "Ramos",
+        }}
         companyColor="#123456"
         onOpenDetail={vi.fn()}
       />,

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { Categoria, Empresa, Producto } from "../../../shared/types/catalog";
-import { buildCloudfrontAssetUrl } from "../utils/cloudfront";
+import { resolveProductImageUrl } from "../utils/cloudfront";
 import { sortCategoriesForDisplay, sortProductsForDisplay } from "../utils/catalogDisplay";
 import {
   fetchPublicProductDetail,
@@ -29,8 +29,13 @@ interface UsePublicCatalogResult {
   loadMore: () => void;
 }
 
-export function usePublicCatalog(tenantSlug: string, selectedCategory: number | null): UsePublicCatalogResult {
+export function usePublicCatalog(
+  tenantSlug: string,
+  selectedCategory: number | null,
+  searchQuery: string,
+): UsePublicCatalogResult {
   const normalizedTenant = tenantSlug.trim();
+  const normalizedSearchQuery = searchQuery.trim();
 
   const companyQuery = useQuery({
     queryKey: ["public-catalog-company", normalizedTenant],
@@ -47,9 +52,15 @@ export function usePublicCatalog(tenantSlug: string, selectedCategory: number | 
   });
 
   const productsQuery = useInfiniteQuery({
-    queryKey: ["public-catalog-products", normalizedTenant, DEFAULT_LIMIT, selectedCategory],
+    queryKey: ["public-catalog-products", normalizedTenant, DEFAULT_LIMIT, selectedCategory, normalizedSearchQuery],
     queryFn: ({ pageParam = 0 }) =>
-      fetchPublicProductsPage(normalizedTenant, DEFAULT_LIMIT, pageParam, selectedCategory),
+      fetchPublicProductsPage(
+        normalizedTenant,
+        DEFAULT_LIMIT,
+        pageParam,
+        selectedCategory,
+        normalizedSearchQuery,
+      ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       const nextOffset = lastPage.offset + lastPage.limit;
@@ -151,7 +162,7 @@ function mapCompany(payload: PublicCompanyResponse | undefined, tenantSlug: stri
 function mapCategory(payload: PublicCategoryResponse): Categoria {
   return {
     id: payload.id,
-    nombre: payload.name?.trim() || "Sin categoria",
+    nombre: payload.name?.trim() || payload.nombre?.trim() || "Sin categoria",
   };
 }
 
@@ -180,6 +191,11 @@ function mapListProduct(item: PublicCatalogListProduct, tenantSlug: string): Pro
     toPositiveNumber(item.categoria_id ?? item.category_id) ??
     buildCategoryId(categoryName);
   const parsedPrice = Number(item.precio);
+  const imagenUrl = resolveProductImageUrl(item.imagen_url, tenantSlug);
+  const imagenSm = resolveProductImageUrl(item.imagen_sm, tenantSlug);
+  const imagenMd = resolveProductImageUrl(item.imagen_md, tenantSlug);
+  const imagenLg = resolveProductImageUrl(item.imagen_lg, tenantSlug);
+  const imagen = imagenUrl || imagenSm || imagenMd || imagenLg || "/product-placeholder.svg";
 
   return {
     id: item.id,
@@ -187,23 +203,15 @@ function mapListProduct(item: PublicCatalogListProduct, tenantSlug: string): Pro
     codigo_producto: item.codigo_producto ?? undefined,
     nombre: item.nombre,
     precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,
-    imagen: resolveImageUrl(item.imagen_url, tenantSlug),
+    imagen,
+    imagen_url: imagenUrl || undefined,
+    imagen_sm: imagenSm || undefined,
+    imagen_md: imagenMd || undefined,
+    imagen_lg: imagenLg || undefined,
     categoriaID: categoryId,
     id_categoria: categoryId,
     categoriaNombre: categoryName,
   };
-}
-
-function resolveImageUrl(rawUrl: string | null, tenantSlug: string): string {
-  if (!rawUrl) {
-    return "/product-placeholder.svg";
-  }
-
-  if (/^https?:\/\//i.test(rawUrl.trim())) {
-    return rawUrl.trim();
-  }
-
-  return buildCloudfrontAssetUrl(rawUrl, tenantSlug, "productos") || "/product-placeholder.svg";
 }
 
 function buildCategoryId(categoryName: string): number {

@@ -131,9 +131,92 @@ export interface CreateOrderResponse {
   numeroPedido: number;
   codigoPedido?: string | null;
   codigo_pedido?: string | null;
+  paymentUrl?: string | null;
+  payment_url?: string | null;
+  checkoutUrl?: string | null;
+  checkout_url?: string | null;
+  wompiUrl?: string | null;
+  wompi_url?: string | null;
+  linkPago?: string | null;
+  link_pago?: string | null;
+  paymentReference?: string | null;
+  payment_reference?: string | null;
+  referenciaPago?: string | null;
+  referencia_pago?: string | null;
+  checkout?: WompiCheckoutPayload | null;
+  paymentPayload?: WompiCheckoutPayload | null;
+  payment_payload?: WompiCheckoutPayload | null;
+  wompiPayload?: WompiCheckoutPayload | null;
+  wompi_payload?: WompiCheckoutPayload | null;
+  next_action?: {
+    type?: string | null;
+    redirect_url?: string | null;
+    redirectUrl?: string | null;
+    open_immediately?: boolean | null;
+    openImmediately?: boolean | null;
+  } | null;
+  nextAction?: {
+    type?: string | null;
+    redirect_url?: string | null;
+    redirectUrl?: string | null;
+    open_immediately?: boolean | null;
+    openImmediately?: boolean | null;
+  } | null;
+  pago?: {
+    redirect_url?: string | null;
+    redirectUrl?: string | null;
+  } | null;
+  payment_ux?: {
+    button?: string | null;
+    confirmation_bullets?: string[] | null;
+    confirmationBullets?: string[] | null;
+  } | null;
+  paymentUx?: {
+    button?: string | null;
+    confirmation_bullets?: string[] | null;
+    confirmationBullets?: string[] | null;
+  } | null;
   totalBruto: number;
   totalIVA: number;
   totalNeto: number;
+}
+
+export interface WompiCheckoutPayload {
+  publicKey?: string | null;
+  public_key?: string | null;
+  "public-key"?: string | null;
+  currency?: string | null;
+  amountInCents?: number | string | null;
+  amount_in_cents?: number | string | null;
+  "amount-in-cents"?: number | string | null;
+  reference?: string | null;
+  signatureIntegrity?: string | null;
+  signature_integrity?: string | null;
+  "signature:integrity"?: string | null;
+  redirectUrl?: string | null;
+  redirect_url?: string | null;
+  "redirect-url"?: string | null;
+  expirationTime?: string | null;
+  expiration_time?: string | null;
+  "expiration-time"?: string | null;
+  [key: string]: string | number | null | undefined;
+}
+
+export interface PrepareWompiCheckoutResponse {
+  provider?: "wompi" | string;
+  checkoutUrl?: string | null;
+  checkout_url?: string | null;
+  paymentUrl?: string | null;
+  payment_url?: string | null;
+  wompiUrl?: string | null;
+  wompi_url?: string | null;
+  linkPago?: string | null;
+  link_pago?: string | null;
+  checkout?: WompiCheckoutPayload | null;
+  paymentPayload?: WompiCheckoutPayload | null;
+  payment_payload?: WompiCheckoutPayload | null;
+  wompiPayload?: WompiCheckoutPayload | null;
+  wompi_payload?: WompiCheckoutPayload | null;
 }
 
 export interface LookupClienteResult {
@@ -183,6 +266,19 @@ export async function createOrder(
     {
       method: "POST",
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function prepareWompiCheckout(
+  tenantSlug: string,
+  pedidoID: number,
+): Promise<PrepareWompiCheckoutResponse> {
+  return await fetchPublicApiJson<PrepareWompiCheckoutResponse>(
+    `/api/public/${encodeURIComponent(tenantSlug)}/pedidos/${encodeURIComponent(String(pedidoID))}/wompi`,
+    "pedidos publicos",
+    {
+      method: "POST",
     },
   );
 }

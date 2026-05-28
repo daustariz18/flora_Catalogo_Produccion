@@ -50,7 +50,6 @@ function getCategoryPriority(value: string): number {
   const normalized = normalizeCategoryOrderKey(value);
   const orderedCategories = [
     ["personalizado", "arreglospersonalizados"],
-    ["madre2026", "madres", "floramadres"],
     ["florabox"],
     ["floracanastos"],
     ["florabouquets"],
@@ -65,6 +64,7 @@ function getCategoryPriority(value: string): number {
     ["bodas"],
     ["diamujer"],
     ["evento"],
+    ["madre2026", "madres", "floramadres"],
   ] as const;
 
   for (let index = 0; index < orderedCategories.length; index += 1) {

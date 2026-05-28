@@ -52,8 +52,21 @@ describe("isDeliveryStepComplete", () => {
         ...domicilio,
         direccion: "Calle 10 # 5-20",
         barrio: "Centro",
+        barrioID: 12,
       }),
     ).toBe(true);
+  });
+
+  it("rechaza domicilios con texto de barrio sin una seleccion real", () => {
+    expect(
+      isDeliveryStepComplete({
+        ...buildBasePedidoState(),
+        metodo: "domicilio" as const,
+        direccion: "Calle 10 # 5-20",
+        barrio: "Centro",
+        barrioID: null,
+      }),
+    ).toBe(false);
   });
 });
 

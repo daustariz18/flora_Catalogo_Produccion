@@ -5,6 +5,9 @@ export interface PublicCatalogListProduct {
   nombre: string;
   precio: number | string;
   imagen_url: string | null;
+  imagen_sm?: string | null;
+  imagen_md?: string | null;
+  imagen_lg?: string | null;
   categoria_id?: number | null;
   category_id?: number | null;
   categoria_nombre: string | null;
@@ -27,6 +30,7 @@ export async function fetchPublicProductsPage(
   limit: number,
   offset: number,
   categoryId: number | null = null,
+  query: string = "",
 ): Promise<PublicCatalogListResponse> {
   const params = new URLSearchParams({
     limit: String(limit),
@@ -35,6 +39,11 @@ export async function fetchPublicProductsPage(
 
   if (categoryId !== null) {
     params.set("categoria_id", String(categoryId));
+  }
+
+  const trimmedQuery = query.trim();
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
   }
 
   return fetchPublicApiJson<PublicCatalogListResponse>(

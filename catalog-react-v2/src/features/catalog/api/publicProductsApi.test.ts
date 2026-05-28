@@ -49,6 +49,44 @@ describe("publicProductsApi", () => {
     );
   });
 
+  it("sends the search query when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse({
+        data: [],
+        total: 0,
+        limit: 12,
+        offset: 0,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchPublicProductsPage("flora", 12, 0, null, "pan");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/public/flora/productos?limit=12&offset=0&q=pan"),
+      expect.any(Object),
+    );
+  });
+
+  it("sends category and search together", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse({
+        data: [],
+        total: 0,
+        limit: 12,
+        offset: 0,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchPublicProductsPage("flora", 12, 0, 3, "pan");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/public/flora/productos?limit=12&offset=0&categoria_id=3&q=pan"),
+      expect.any(Object),
+    );
+  });
+
   it("requests the product detail endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       createJsonResponse({

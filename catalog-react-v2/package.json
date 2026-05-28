@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host=127.0.0.1 --port=5173 --configLoader=native",
     "build": "tsc -b && vite build",
     "build:cpanel": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-cpanel-zip.ps1",
     "lint": "eslint .",

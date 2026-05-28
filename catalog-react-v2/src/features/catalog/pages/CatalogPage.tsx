@@ -15,6 +15,7 @@ export function CatalogPage() {
   const { tenantSlug = "" } = useParams();
   const activeTenant = resolveTenantSlug(tenantSlug);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [detailProduct, setDetailProduct] = useState<Producto | null>(null);
   const { barrios } = usePublicBarrios(activeTenant);
   const {
@@ -22,22 +23,19 @@ export function CatalogPage() {
     categories,
     products,
     hasMore,
-    isLoadingCategories,
     isLoadingProducts,
     isLoadingInitial,
     isLoadingMore,
     error,
     loadMore,
-  } = usePublicCatalog(activeTenant, selectedCategory);
+  } = usePublicCatalog(activeTenant, selectedCategory, searchQuery);
 
   const addItem = useCartStore((state) => state.addItem);
   const setAvailableBarrios = useCartStore((state) => state.setAvailableBarrios);
-
-  useEffect(() => {
-    if (selectedCategory !== null && !categories.some((category) => category.id === selectedCategory)) {
-      setSelectedCategory(null);
-    }
-  }, [categories, selectedCategory]);
+  const effectiveSelectedCategory =
+    selectedCategory !== null && !categories.some((category) => category.id === selectedCategory)
+      ? null
+      : selectedCategory;
 
   useEffect(() => {
     storeTenantSlug(activeTenant);
@@ -61,42 +59,74 @@ export function CatalogPage() {
   }
 
   const companyColor = company.colorPrimario;
-  const hasProducts = products.length > 0;
+  const normalizedSearchQuery = searchQuery.trim();
+  const isSearchActive = normalizedSearchQuery.length > 0;
+  const emptyMessage = isSearchActive
+    ? "No encontramos productos para esta busqueda."
+    : effectiveSelectedCategory !== null
+      ? "No encontramos productos para esta seleccion."
+      : "Todavia no hay productos publicados para este catalogo.";
+  const showProductLoading = isLoadingProducts && products.length === 0;
 
   return (
     <main style={{ "--brand-color": companyColor } as CSSProperties} className="catalog-page">
       <Header company={company} tenantSlug={activeTenant} />
 
       <section className="catalog-content main-content px-4 md:pb-6">
+        <div className="catalog-search-wrap">
+          <label htmlFor="catalog-search" className="catalog-search-label">
+            Buscar productos
+          </label>
+          <div className="catalog-search-field">
+            <span className="catalog-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" role="presentation">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M16 16L20 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
+            <input
+              id="catalog-search"
+              className="catalog-search-input"
+              type="text"
+              value={searchQuery}
+              placeholder="Nombre, codigo o categoria"
+              aria-label="Buscar productos"
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            {normalizedSearchQuery ? (
+              <button
+                type="button"
+                className="catalog-search-clear"
+                onClick={() => setSearchQuery("")}
+                aria-label="Limpiar busqueda"
+              >
+                Limpiar
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         <CategoryFilter
           categories={categories}
-          selectedCategory={selectedCategory}
+          selectedCategory={effectiveSelectedCategory}
           onChange={setSelectedCategory}
           companyColor={companyColor}
         />
 
-        {hasProducts ? (
+        {showProductLoading ? (
+          <section className="catalog-empty-shell" aria-live="polite">
+            <p className="empty-state">{isSearchActive ? "Buscando productos..." : "Cargando productos..."}</p>
+          </section>
+        ) : (
           <ProductGrid
             products={products}
-            categories={categories}
-            searchQuery=""
             companyColor={companyColor}
             onOpenDetail={setDetailProduct}
+            emptyMessage={emptyMessage}
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}
             onLoadMore={loadMore}
           />
-        ) : (
-          <section className="catalog-empty-shell">
-            <p className="empty-state">
-              {isLoadingProducts || isLoadingCategories
-                ? "Cargando categorias y productos..."
-                : "Todavia no hay productos publicados para este catalogo."}
-            </p>
-            <button type="button" className="ghost catalog-load-more" onClick={loadMore} disabled={!hasMore || isLoadingMore}>
-              {isLoadingMore ? "Cargando..." : hasMore ? "Cargar mas" : "Sin mas productos"}
-            </button>
-          </section>
         )}
       </section>
 

@@ -1,4 +1,4 @@
-import { fetchPublicApiJson } from "../../../shared/api/publicApi";
+import { getCatalogoPublico } from "./publicCatalogApi";
 
 export interface PublicCategoryResponse {
   id: number;
@@ -11,10 +11,7 @@ export interface PublicCategoryResponse {
 }
 
 export async function fetchPublicCategories(tenantSlug: string): Promise<PublicCategoryResponse[]> {
-  const categories = await fetchPublicApiJson<PublicCategoryResponse[]>(
-    `/api/public/${encodeURIComponent(tenantSlug)}/categorias`,
-    "catalogo publico",
-  );
+  const { categorias: categories } = await getCatalogoPublico(tenantSlug);
 
   return categories.filter(isPublicCategoryActive);
 }

@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 export interface CartItem {
   id: number;
+  id_producto?: number;
   nombre: string;
   precio: number;
   imagen: string;
@@ -62,6 +63,8 @@ export interface AvailableBarrio {
 export interface SubmittedOrder {
   id: string;
   pedidoID: number | null;
+  empresaID?: number | null;
+  empresaCelular?: string | null;
   createdAt: string;
   companySlug: string;
   pedido: PedidoState;
@@ -105,6 +108,8 @@ interface CartStore {
     paymentMethod?: "wompi" | "transferencia" | "efectivo",
     paymentUrl?: string | null,
     paymentReference?: string | null,
+    empresaID?: number | null,
+    empresaCelular?: string | null,
   ) => SubmittedOrder | null;
   clearLastSubmittedOrder: () => void;
   setAvailableBarrios: (barrios: AvailableBarrio[]) => void;
@@ -344,6 +349,8 @@ export const useCartStore = create<CartStore>()(
         paymentMethod = "wompi",
         paymentUrl = null,
         paymentReference = null,
+        empresaID = null,
+        empresaCelular = null,
       ) => {
         const { pedidoState } = get();
 
@@ -354,6 +361,8 @@ export const useCartStore = create<CartStore>()(
         const order: SubmittedOrder = {
           id: buildOrderId(pedidoID, codigoPedido),
           pedidoID,
+          empresaID,
+          empresaCelular,
           createdAt: new Date().toISOString(),
           companySlug,
           pedido: pedidoState,

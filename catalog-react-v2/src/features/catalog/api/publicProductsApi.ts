@@ -2,6 +2,9 @@ import { fetchPublicApiJson } from "../../../shared/api/publicApi";
 
 export interface PublicCatalogListProduct {
   id: number;
+  id_producto?: number | null;
+  producto_id?: number | null;
+  productoID?: number | null;
   nombre: string;
   precio: number | string;
   imagen_url: string | null;
@@ -12,6 +15,8 @@ export interface PublicCatalogListProduct {
   category_id?: number | null;
   categoria_nombre: string | null;
   codigo_producto: string | null;
+  codigo_catalogo?: string | null;
+  codigoCatalogo?: string | null;
 }
 
 export interface PublicCatalogListResponse {

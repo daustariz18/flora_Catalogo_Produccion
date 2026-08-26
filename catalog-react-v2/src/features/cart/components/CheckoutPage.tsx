@@ -99,13 +99,6 @@ function getWompiCheckoutPayload(
 
 const DEFAULT_PAYMENT_OPTIONS: CheckoutPaymentOption[] = [
   {
-    value: "wompi",
-    title: "WOMPI",
-    caption: "Pago online seguro con tarjeta y PSE",
-    cta: "PAGAR CON WOMPI",
-    subtitle: "Crear pedido y abrir pasarela",
-  },
-  {
     value: "transferencia",
     title: "Transferencia",
     caption: "Confirma con comprobante por WhatsApp",
@@ -131,7 +124,7 @@ function mapPublicPaymentMethods(methods: PublicPaymentMethod[]): CheckoutPaymen
 
     const value = normalizePaymentMethod(method.value ?? method.method ?? method.code ?? method.id);
 
-    if (!value) {
+    if (!value || value === "wompi") {
       continue;
     }
 
@@ -154,6 +147,24 @@ function getEmpresaId(empresa: { id?: number | null; empresa_id?: number | null;
   return empresa?.id ?? empresa?.empresa_id ?? empresa?.empresaID ?? null;
 }
 
+function getEmpresaSlug(empresa: { slug?: string | null } | null): string | null {
+  return firstNonEmpty(empresa?.slug);
+}
+
+function getEmpresaCelular(
+  empresa:
+    | {
+        celular?: string | null;
+        cell?: string | null;
+        phone?: string | null;
+        telefono?: string | null;
+        telefono_celular?: string | null;
+      }
+    | null,
+): string | null {
+  return firstNonEmpty(empresa?.celular, empresa?.telefono_celular, empresa?.cell, empresa?.phone, empresa?.telefono);
+}
+
 function getTransferAccountsForCompany(empresaId: number | null): TransferAccount[] {
   return empresaId === TRANSFER_ACCOUNTS_COMPANY_ID ? COMPANY_TRANSFER_ACCOUNTS : [];
 }
@@ -170,7 +181,7 @@ function withTransferAccountFlow(
     ? options
     : [
         ...options,
-        DEFAULT_PAYMENT_OPTIONS.find((option) => option.value === "transferencia") ?? DEFAULT_PAYMENT_OPTIONS[1],
+        DEFAULT_PAYMENT_OPTIONS.find((option) => option.value === "transferencia") ?? DEFAULT_PAYMENT_OPTIONS[0],
       ];
 
   return optionsWithTransfer.map((option) =>
@@ -367,6 +378,20 @@ function formatPhoneNumber(indicativo: string | null, telefono: string): string 
   return `${safeIndicativo} ${safeTelefono}`.trim();
 }
 
+function normalizeWhatsappNumber(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 10) {
+    return `57${digits}`;
+  }
+
+  return digits;
+}
+
 function formatDeliveryAddress(direccion: string, complemento: string): string {
   return [direccion.trim(), complemento.trim()].filter(Boolean).join(" · ");
 }
@@ -432,9 +457,19 @@ export function buildFloraWhatsappMessage(pedidoState: PedidoState, totalFinal: 
   return lines.join("\n");
 }
 
-function buildFloraWhatsappUrl(pedidoState: PedidoState, totalFinal: number): string {
+export function buildFloraWhatsappUrl(
+  pedidoState: PedidoState,
+  totalFinal: number,
+  whatsappNumber?: string | null,
+): string | null {
   const message = buildFloraWhatsappMessage(pedidoState, totalFinal);
-  return `https://wa.me/573013755838?text=${encodeURIComponent(message)}`;
+  const destination = normalizeWhatsappNumber(whatsappNumber);
+
+  if (!destination) {
+    return null;
+  }
+
+  return `https://wa.me/${destination}?text=${encodeURIComponent(message)}`;
 }
 
 function WizardSteps({ step, stepTitles, onStepChange }: Readonly<WizardStepsProps>) {
@@ -942,7 +977,7 @@ function MessageStep({
 
       <section className="checkout-card checkout-card-compact checkout-card-message">
         <div className="compact-card-head">
-          <h3>Observaciones especiales</h3>
+          <h3>Observaciones Para el Arreglo</h3>
         </div>
 
         <label className="checkout-field checkout-field-wide">
@@ -1221,9 +1256,11 @@ export function CheckoutPage() {
   const [step, setStep] = useState<WizardStep>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wompi");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("transferencia");
   const [paymentOptions, setPaymentOptions] = useState<CheckoutPaymentOption[]>(DEFAULT_PAYMENT_OPTIONS);
   const [empresaId, setEmpresaId] = useState<number | null>(null);
+  const [empresaSlug, setEmpresaSlug] = useState<string | null>(null);
+  const [empresaCelular, setEmpresaCelular] = useState<string | null>(null);
   const [customerLookupStatus, setCustomerLookupStatus] = useState<"idle" | "loading" | "found" | "not_found" | "error">(
     "idle",
   );
@@ -1241,7 +1278,8 @@ export function CheckoutPage() {
 
   const costoDomicilio = pedidoState.entrega.metodo === "domicilio" ? pedidoState.entrega.costoDomicilio : 0;
   const catalogPath = buildTenantPath(resolvedTenantSlug);
-  const successPath = buildTenantPath(resolvedTenantSlug, "/pedido-exitoso");
+  const orderTenantSlug = empresaSlug ?? resolvedTenantSlug;
+  const successPath = buildTenantPath(orderTenantSlug, "/pedido-exitoso");
   const isFlora = resolvedTenantSlug.trim().toLowerCase() === "flora";
   const hasProducts = pedidoState.productos.length > 0;
   const safeIndicativo = (pedidoState.cliente.indicativo ?? "").trim();
@@ -1272,31 +1310,38 @@ export function CheckoutPage() {
     let cancelled = false;
 
     async function loadPaymentMethods() {
-      if (!resolvedTenantSlug || isFlora) {
+      if (!resolvedTenantSlug) {
         setPaymentOptions(DEFAULT_PAYMENT_OPTIONS);
         setEmpresaId(null);
+        setEmpresaSlug(null);
+        setEmpresaCelular(null);
         return;
       }
 
       try {
         const catalog = await getCatalogoPublico(resolvedTenantSlug);
         const nextEmpresaId = getEmpresaId(catalog.empresa);
+        const nextEmpresaSlug = getEmpresaSlug(catalog.empresa);
+        const nextEmpresaCelular = getEmpresaCelular(catalog.empresa);
         const transferAccounts = getTransferAccountsForCompany(nextEmpresaId);
-        const mappedOptions = withTransferAccountFlow(
-          mapPublicPaymentMethods(catalog.payment_methods ?? []),
-          transferAccounts,
-        );
+        const mappedOptions = isFlora
+          ? DEFAULT_PAYMENT_OPTIONS
+          : withTransferAccountFlow(mapPublicPaymentMethods(catalog.payment_methods ?? []), transferAccounts);
 
         if (!cancelled) {
           setEmpresaId(nextEmpresaId);
+          setEmpresaSlug(nextEmpresaSlug);
+          setEmpresaCelular(nextEmpresaCelular);
           setPaymentOptions(mappedOptions);
           if (!mappedOptions.some((option) => option.value === paymentMethod)) {
-            setPaymentMethod(mappedOptions[0]?.value ?? "wompi");
+            setPaymentMethod(mappedOptions[0]?.value ?? "transferencia");
           }
         }
       } catch {
         if (!cancelled) {
           setEmpresaId(null);
+          setEmpresaSlug(null);
+          setEmpresaCelular(null);
           setPaymentOptions(DEFAULT_PAYMENT_OPTIONS);
         }
       }
@@ -1361,7 +1406,7 @@ export function CheckoutPage() {
     setCustomerLookupStatus("loading");
 
     try {
-      const result = await lookupClienteByTelefono(resolvedTenantSlug, normalizedPhone, safeIndicativo || "+57");
+      const result = await lookupClienteByTelefono(orderTenantSlug, normalizedPhone, safeIndicativo || "+57");
 
       if (!result) {
         setCustomerLookupStatus("not_found");
@@ -1454,6 +1499,27 @@ export function CheckoutPage() {
       }
 
       const effectivePaymentMethod: PaymentMethod = isFlora ? "efectivo" : paymentMethod;
+      const toOrderItem = (producto: CartItem) => ({
+        productoID: producto.id_producto ?? producto.id,
+        cantidad: producto.cantidad,
+      });
+      const toExpandedOrderItem = (producto: CartItem) => {
+        const productoID = producto.id_producto ?? producto.id;
+
+        return {
+          productoID,
+          cantidad: producto.cantidad,
+          producto_id: productoID,
+          productoId: productoID,
+          id_producto: productoID,
+          id: productoID,
+          product_id: productoID,
+          productId: productoID,
+          qty: producto.cantidad,
+          quantity: producto.cantidad,
+          count: producto.cantidad,
+        };
+      };
       const orderPayload: CreateOrderRequest = {
         cliente: {
           nombre_completo: pedidoState.cliente.nombre.trim(),
@@ -1463,47 +1529,14 @@ export function CheckoutPage() {
           tipo_ident: tipoIdentCanonical,
           indicativo,
         },
-        items: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        productos: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-          producto_id: producto.id,
-          productoId: producto.id,
-          id_producto: producto.id,
-          id: producto.id,
-          product_id: producto.id,
-          productId: producto.id,
-          qty: producto.cantidad,
-          quantity: producto.cantidad,
-          count: producto.cantidad,
-        })),
-        detalles: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        order_items: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        cart_items: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        line_items: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        cart: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
-        carrito: pedidoState.productos.map((producto) => ({
-          productoID: producto.id,
-          cantidad: producto.cantidad,
-        })),
+        items: pedidoState.productos.map(toOrderItem),
+        productos: pedidoState.productos.map(toExpandedOrderItem),
+        detalles: pedidoState.productos.map(toOrderItem),
+        order_items: pedidoState.productos.map(toOrderItem),
+        cart_items: pedidoState.productos.map(toOrderItem),
+        line_items: pedidoState.productos.map(toOrderItem),
+        cart: pedidoState.productos.map(toOrderItem),
+        carrito: pedidoState.productos.map(toOrderItem),
         totalBruto: pedidoState.subtotal,
         totalIVA,
         totalNeto: totalFinal,
@@ -1580,15 +1613,16 @@ export function CheckoutPage() {
 
       console.info("[checkout] Payload /pedidos", orderPayload);
 
-      const response = await createOrder(resolvedTenantSlug, orderPayload);
+      const response = await createOrder(orderTenantSlug, orderPayload);
 
       const codigoPedido = response.codigo_pedido ?? response.codigoPedido ?? null;
+      const responseEmpresaId = response.empresaID ?? empresaId;
       const paymentReference =
         getPaymentReference(response) ?? buildFallbackPaymentReference(response.pedidoID, codigoPedido);
       const responseNextActionUrl = getNextActionRedirectUrl(response);
       const paymentUrl =
         effectivePaymentMethod === "wompi"
-          ? responseNextActionUrl ?? await resolveWompiPaymentUrl(resolvedTenantSlug, response)
+          ? responseNextActionUrl ?? await resolveWompiPaymentUrl(orderTenantSlug, response)
           : null;
       if (effectivePaymentMethod === "wompi" && !paymentUrl) {
         setSubmitError(
@@ -1598,7 +1632,7 @@ export function CheckoutPage() {
       }
 
       const order = submitOrder(
-        resolvedTenantSlug,
+        orderTenantSlug,
         response.pedidoID,
         codigoPedido,
         totalFinal,
@@ -1606,6 +1640,8 @@ export function CheckoutPage() {
         effectivePaymentMethod,
         paymentUrl,
         paymentReference,
+        responseEmpresaId,
+        empresaCelular,
       );
 
       if (!order) {
@@ -1614,7 +1650,14 @@ export function CheckoutPage() {
       }
 
       if (isFlora) {
-        window.location.assign(buildFloraWhatsappUrl(pedidoState, totalFinal));
+        const whatsappUrl = buildFloraWhatsappUrl(pedidoState, totalFinal, empresaCelular);
+
+        if (!whatsappUrl) {
+          setSubmitError("No encontramos el celular de WhatsApp de la empresa. Verifica el catalogo e intenta de nuevo.");
+          return;
+        }
+
+        window.location.assign(whatsappUrl);
         return;
       }
 

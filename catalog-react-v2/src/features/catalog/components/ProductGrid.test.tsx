@@ -38,7 +38,7 @@ const products: Producto[] = [
 ];
 
 describe("ProductGrid", () => {
-  it("shows products in the configured display order", () => {
+  it("renders products in the provided display order", () => {
     render(
       <ProductGrid
         products={products}
@@ -49,8 +49,8 @@ describe("ProductGrid", () => {
     );
 
     const cards = screen.getAllByTestId("product-card");
-    expect(cards[0]).toHaveTextContent("Arreglo Personalizado Deluxe | Arreglos personalizados");
-    expect(cards[1]).toHaveTextContent("Rosa Roja | Rosas");
+    expect(cards[0]).toHaveTextContent("Rosa Roja | Rosas");
+    expect(cards[1]).toHaveTextContent("Arreglo Personalizado Deluxe | Arreglos personalizados");
   });
 
   it("shows the empty state message when there are no products", () => {

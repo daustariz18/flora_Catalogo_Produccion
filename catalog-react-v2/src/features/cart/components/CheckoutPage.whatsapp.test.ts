@@ -1,7 +1,7 @@
 ﻿import { describe, expect, it } from "vitest";
 import { formatCOP } from "../../../shared/utils/currency";
 import type { PedidoState } from "../store/cartStore";
-import { buildFloraWhatsappMessage } from "./CheckoutPage";
+import { buildFloraWhatsappMessage, buildFloraWhatsappUrl } from "./CheckoutPage";
 
 function buildSamplePedidoState(): PedidoState {
   return {
@@ -73,5 +73,20 @@ describe("buildFloraWhatsappMessage", () => {
         "Quedo atento a la información de pago para completar el proceso.",
       ].join("\n"),
     );
+  });
+
+  it("sends Flora checkout confirmation to the catalog company WhatsApp number", () => {
+    const url = buildFloraWhatsappUrl(buildSamplePedidoState(), 365000, "+57 3103489766");
+    expect(url).not.toBeNull();
+
+    const whatsappUrl = new URL(url ?? "");
+
+    expect(`${whatsappUrl.origin}${whatsappUrl.pathname}`).toBe("https://wa.me/573103489766");
+  });
+
+  it("does not build a WhatsApp URL without a catalog company number", () => {
+    const url = buildFloraWhatsappUrl(buildSamplePedidoState(), 365000);
+
+    expect(url).toBeNull();
   });
 });

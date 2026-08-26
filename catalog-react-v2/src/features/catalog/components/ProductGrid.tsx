@@ -1,7 +1,8 @@
-import { useMemo } from "react";
 import type { Producto } from "../../../shared/types/catalog";
 import { ProductCard } from "./ProductCard";
-import { sortProductsForDisplay } from "../utils/catalogDisplay";
+
+export type CatalogViewMode = "grid" | "list";
+export type ProductSortMode = "code-asc" | "name-asc" | "name-desc" | "price-desc" | "price-asc";
 
 interface ProductGridProps {
   products: Producto[];
@@ -11,6 +12,7 @@ interface ProductGridProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  viewMode?: CatalogViewMode;
 }
 
 export function ProductGrid({
@@ -21,10 +23,9 @@ export function ProductGrid({
   hasMore = false,
   isLoadingMore = false,
   onLoadMore,
+  viewMode = "grid",
 }: ProductGridProps) {
-  const filteredProducts = useMemo(() => {
-    return sortProductsForDisplay(products);
-  }, [products]);
+  const filteredProducts = products;
 
   if (!filteredProducts.length) {
     return (
@@ -41,13 +42,14 @@ export function ProductGrid({
 
   return (
     <div className="catalog-products-stack">
-      <section className="product-grid gap-4" aria-label="Listado de productos">
+      <section className={`product-grid product-grid-${viewMode} gap-4`} aria-label="Listado de productos">
         {filteredProducts.map((product) => (
           <ProductCard
             key={product.id}
             product={product}
             companyColor={companyColor}
             onOpenDetail={() => onOpenDetail(product)}
+            viewMode={viewMode}
           />
         ))}
       </section>

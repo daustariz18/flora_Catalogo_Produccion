@@ -86,10 +86,10 @@ export function ProductDetailModal({
                 <strong>{displayProduct.categoriaNombre}</strong>
               </p>
             ) : null}
-            {displayProduct.codigo_producto ? (
+            {displayProduct.codigo_catalogo || displayProduct.codigo_producto || displayProduct.codigoProduct ? (
               <p>
                 <span>Codigo</span>
-                <strong>{displayProduct.codigo_producto}</strong>
+                <strong>{displayProduct.codigo_catalogo ?? displayProduct.codigo_producto ?? displayProduct.codigoProduct}</strong>
               </p>
             ) : null}
           </div>

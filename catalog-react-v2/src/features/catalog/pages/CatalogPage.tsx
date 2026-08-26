@@ -6,16 +6,33 @@ import { CartSummaryBar } from "../../cart/components/CartSummaryBar";
 import { CategoryFilter } from "../components/CategoryFilter";
 import { Header } from "../components/Header";
 import { ProductDetailModal } from "../components/ProductDetailModal";
-import { ProductGrid } from "../components/ProductGrid";
+import { ProductGrid, type CatalogViewMode, type ProductSortMode } from "../components/ProductGrid";
+import { ProductSortDropdown } from "../components/ProductSortDropdown";
+import { ViewModeToggle } from "../components/ViewModeToggle";
 import { usePublicBarrios } from "../hooks/usePublicBarrios";
 import { usePublicCatalog } from "../hooks/usePublicCatalog";
 import { resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
+
+const CATALOG_VIEW_MODE_KEY = "petalops.catalog.viewMode";
+const CATALOG_VIEW_MODES: CatalogViewMode[] = ["grid", "list"];
+const CATALOG_SORT_MODE_KEY = "petalops.catalog.sortMode";
+
+function readStoredViewMode(): CatalogViewMode {
+  try {
+    const storedMode = window.localStorage.getItem(CATALOG_VIEW_MODE_KEY);
+    return CATALOG_VIEW_MODES.includes(storedMode as CatalogViewMode) ? (storedMode as CatalogViewMode) : "grid";
+  } catch {
+    return "grid";
+  }
+}
 
 export function CatalogPage() {
   const { tenantSlug = "" } = useParams();
   const activeTenant = resolveTenantSlug(tenantSlug);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<CatalogViewMode>(readStoredViewMode);
+  const [sortMode, setSortMode] = useState<ProductSortMode>("code-asc");
   const [detailProduct, setDetailProduct] = useState<Producto | null>(null);
   const { barrios } = usePublicBarrios(activeTenant);
   const {
@@ -28,7 +45,7 @@ export function CatalogPage() {
     isLoadingMore,
     error,
     loadMore,
-  } = usePublicCatalog(activeTenant, selectedCategory, searchQuery);
+  } = usePublicCatalog(activeTenant, selectedCategory, searchQuery, sortMode);
 
   const addItem = useCartStore((state) => state.addItem);
   const setAvailableBarrios = useCartStore((state) => state.setAvailableBarrios);
@@ -40,6 +57,14 @@ export function CatalogPage() {
   useEffect(() => {
     storeTenantSlug(activeTenant);
   }, [activeTenant]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CATALOG_VIEW_MODE_KEY, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CATALOG_SORT_MODE_KEY, sortMode);
+  }, [sortMode]);
 
   useEffect(() => {
     setAvailableBarrios(barrios);
@@ -106,12 +131,18 @@ export function CatalogPage() {
           </div>
         </div>
 
-        <CategoryFilter
-          categories={categories}
-          selectedCategory={effectiveSelectedCategory}
-          onChange={setSelectedCategory}
-          companyColor={companyColor}
-        />
+        <div className="catalog-toolbar">
+          <CategoryFilter
+            categories={categories}
+            selectedCategory={effectiveSelectedCategory}
+            onChange={setSelectedCategory}
+            companyColor={companyColor}
+          />
+          <div className="catalog-toolbar-actions">
+            <ProductSortDropdown value={sortMode} onChange={setSortMode} />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
 
         {showProductLoading ? (
           <section className="catalog-empty-shell" aria-live="polite">
@@ -126,6 +157,7 @@ export function CatalogPage() {
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}
             onLoadMore={loadMore}
+            viewMode={viewMode}
           />
         )}
       </section>
@@ -138,6 +170,7 @@ export function CatalogPage() {
         onAddToCart={(product) =>
           addItem({
             id: product.id,
+            id_producto: product.id_producto ?? product.id,
             nombre: product.nombre,
             precio: product.precio,
             imagen: product.imagen,

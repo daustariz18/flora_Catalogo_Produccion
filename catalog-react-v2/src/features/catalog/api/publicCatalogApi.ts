@@ -3,6 +3,8 @@ import { fetchPublicApiJson } from "../../../shared/api/publicApi";
 export type PublicProducto = {
   id: number;
   id_producto?: number;
+  codigo_catalogo?: string;
+  codigoCatalogo?: string;
   codigo_producto?: string;
   codigoProduct?: string;
   categoria_id?: number | null;
@@ -36,6 +38,11 @@ export type PublicEmpresa = {
   empresaID?: number | null;
   slug?: string | null;
   nombre: string;
+  celular?: string | null;
+  cell?: string | null;
+  phone?: string | null;
+  telefono?: string | null;
+  telefono_celular?: string | null;
   logoUrl?: string | null;
   logo_url?: string | null;
   logo?: string | null;
@@ -202,6 +209,7 @@ function mergeCatalogProducts(primary: PublicProducto[], fallback: PublicProduct
       ...fallbackItem,
       ...item,
       codigo_producto: item.codigo_producto ?? item.codigoProduct ?? fallbackItem.codigo_producto ?? fallbackItem.codigoProduct,
+      codigo_catalogo: item.codigo_catalogo ?? item.codigoCatalogo ?? fallbackItem.codigo_catalogo ?? fallbackItem.codigoCatalogo,
     };
   });
 }

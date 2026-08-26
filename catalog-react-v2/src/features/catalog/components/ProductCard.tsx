@@ -3,17 +3,24 @@ import type { Producto } from "../../../shared/types/catalog";
 import { useCartStore } from "../../cart/store/cartStore";
 import { formatCOP } from "../../../shared/utils/currency";
 import { resolveProductImageCandidates } from "../utils/cloudfront";
+import type { CatalogViewMode } from "./ProductGrid";
 
 interface ProductCardProps {
   product: Producto;
   companyColor: string;
   onOpenDetail: () => void;
+  viewMode?: CatalogViewMode;
 }
 
 const IMAGE_WIDTH = 320;
 const IMAGE_HEIGHT = 400;
 
-export const ProductCard = memo(function ProductCard({ product, companyColor, onOpenDetail }: ProductCardProps) {
+export const ProductCard = memo(function ProductCard({
+  product,
+  companyColor,
+  onOpenDetail,
+  viewMode = "grid",
+}: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [imageIndex, setImageIndex] = useState(0);
@@ -31,9 +38,11 @@ export const ProductCard = memo(function ProductCard({ product, companyColor, on
   const imageSrc = imageCandidates[imageIndex] ?? "/product-placeholder.svg";
   const normalizedCategory = String(product.categoriaNombre ?? product.categoriaID ?? "").trim();
   const categoryLabel = normalizedCategory ? normalizedCategory : "Sin categoria";
+  const isGridView = viewMode === "grid";
+  const productCode = product.codigo_catalogo ?? product.codigo_producto ?? product.codigoProduct;
 
   return (
-    <article className="product-card rounded-xl border border-slate-200 bg-white shadow-sm">
+    <article className={`product-card product-card-${viewMode} rounded-xl border border-slate-200 bg-white shadow-sm`}>
       <button
         className="product-media block w-full"
         type="button"
@@ -61,11 +70,12 @@ export const ProductCard = memo(function ProductCard({ product, companyColor, on
       </button>
 
       <div className="product-body p-3">
-        <p className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-600">
+        <p className="product-category-pill inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-600">
           Categoria {categoryLabel}
         </p>
         <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{product.nombre}</h3>
-        {product.codigo_producto ? <p className="text-xs font-medium text-slate-500">Codigo: {product.codigo_producto}</p> : null}
+        {productCode ? <p className="product-code text-xs font-medium text-slate-500">Codigo: {productCode}</p> : null}
+        {!isGridView && product.descripcion ? <p className="product-description">{product.descripcion}</p> : null}
         <p className="text-slate-900 font-semibold">{formatCOP(product.precio)}</p>
 
         <button
@@ -75,6 +85,7 @@ export const ProductCard = memo(function ProductCard({ product, companyColor, on
           onClick={() =>
             addItem({
               id: product.id,
+              id_producto: product.id_producto ?? product.id,
               nombre: product.nombre,
               precio: product.precio,
               imagen: product.imagen,

@@ -206,6 +206,7 @@ export function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: s
       return {
         id: item.id,
         id_producto: item.id_producto ?? item.id,
+        codigo_catalogo: item.codigo_catalogo ?? item.codigoCatalogo ?? undefined,
         codigo_producto: item.codigo_producto ?? item.codigoProduct,
         nombre: item.nombre,
         precio: Number.isFinite(parsedPrice) ? parsedPrice : 0,

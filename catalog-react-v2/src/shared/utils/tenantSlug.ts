@@ -29,7 +29,7 @@ export function storeTenantSlug(tenantSlug?: string | null): void {
 }
 
 export function resolveTenantSlug(tenantSlug?: string | null): string {
-  return normalizeTenantSlug(tenantSlug) || getStoredTenantSlug() || DEFAULT_DEV_TENANT_SLUG;
+  return normalizeTenantSlug(tenantSlug) || DEFAULT_DEV_TENANT_SLUG || getStoredTenantSlug();
 }
 
 export function buildTenantPath(tenantSlug?: string | null, suffix = ""): string {

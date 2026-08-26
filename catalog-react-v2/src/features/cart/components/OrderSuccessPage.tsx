@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { formatCOP } from "../../../shared/utils/currency";
 import { buildTenantPath, resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
 import { useCartStore } from "../store/cartStore";
@@ -8,10 +8,13 @@ import { buildOrderSummary } from "../utils/orderSummary";
 
 export function OrderSuccessPage() {
   const { tenantSlug = "" } = useParams();
+  const navigate = useNavigate();
   const resolvedTenantSlug = resolveTenantSlug(tenantSlug);
   const lastSubmittedOrder = useCartStore((state) => state.lastSubmittedOrder);
   const resetCheckoutFlow = useCartStore((state) => state.resetCheckoutFlow);
-  const [order, setOrder] = useState<SubmittedOrder | null>(() => lastSubmittedOrder);
+  const [order, setOrder] = useState<SubmittedOrder | null>(() =>
+    isOrderForTenant(lastSubmittedOrder, resolvedTenantSlug) ? lastSubmittedOrder : null,
+  );
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -23,12 +26,24 @@ export function OrderSuccessPage() {
       return;
     }
 
+    if (!isOrderForTenant(lastSubmittedOrder, resolvedTenantSlug)) {
+      return;
+    }
+
     setOrder(lastSubmittedOrder);
     resetCheckoutFlow();
-  }, [lastSubmittedOrder, resetCheckoutFlow]);
+  }, [lastSubmittedOrder, resetCheckoutFlow, resolvedTenantSlug]);
 
   const catalogPath = buildTenantPath(resolvedTenantSlug);
   const cartPath = buildTenantPath(resolvedTenantSlug, "/carrito");
+
+  if (!order && lastSubmittedOrder && !isOrderForTenant(lastSubmittedOrder, resolvedTenantSlug)) {
+    return <Navigate to={buildTenantPath(lastSubmittedOrder.companySlug, "/pedido-exitoso")} replace />;
+  }
+
+  if (order && !isOrderForTenant(order, resolvedTenantSlug)) {
+    return <Navigate to={buildTenantPath(order.companySlug, "/pedido-exitoso")} replace />;
+  }
 
   if (!order) {
     return <Navigate to={cartPath} replace />;
@@ -40,9 +55,10 @@ export function OrderSuccessPage() {
   const isWompi = order.paymentMethod === "wompi";
   const isWompiPending = order.paymentStatus === "pendiente_pago";
   const paymentLabel = getPaymentMethodLabel(order.paymentMethod);
-  const transferWhatsappHref = `https://wa.me/${getPaymentWhatsappNumber()}?text=${encodeURIComponent(
-    `Hola, comparto comprobante de pago del pedido ${order.id}. Cliente: ${order.pedido.cliente.nombre}. Total: ${formatCOP(order.totalPrice)}.`,
-  )}`;
+  const paymentWhatsappNumber = getPaymentWhatsappNumber(order);
+  const transferWhatsappHref = paymentWhatsappNumber
+    ? `https://wa.me/${paymentWhatsappNumber}?text=${encodeURIComponent(getPaymentWhatsappMessage(order))}`
+    : null;
 
   async function handleCopySummary() {
     if (!order) {
@@ -66,7 +82,13 @@ export function OrderSuccessPage() {
       // ignore storage errors
     }
 
-    window.open("about:blank", "_self");
+    window.close();
+
+    window.setTimeout(() => {
+      if (!window.closed) {
+        navigate(catalogPath, { replace: true });
+      }
+    }, 100);
   }
 
   return (
@@ -145,7 +167,7 @@ export function OrderSuccessPage() {
               Continuar pago en Wompi
             </a>
           ) : null}
-          {isTransferPending ? (
+          {isTransferPending && transferWhatsappHref ? (
             <a className="cta success-link" href={transferWhatsappHref} target="_blank" rel="noreferrer">
               Enviar comprobante por WhatsApp
             </a>
@@ -177,7 +199,77 @@ function getPaymentMethodLabel(method: SubmittedOrder["paymentMethod"]): string 
   return "Efectivo";
 }
 
-function getPaymentWhatsappNumber(): string {
-  const configured = (import.meta.env.VITE_TRANSFER_WHATSAPP_PHONE as string | undefined)?.replace(/\D/g, "");
-  return configured || "573128896624";
+function isOrderForTenant(order: SubmittedOrder | null | undefined, tenantSlug: string): boolean {
+  if (!order) {
+    return false;
+  }
+
+  return normalizeSlug(order.companySlug) === normalizeSlug(tenantSlug);
+}
+
+function normalizeSlug(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function getPaymentWhatsappNumber(order: SubmittedOrder): string | null {
+  return normalizeWhatsappNumber(order.empresaCelular);
+}
+
+function getPaymentWhatsappMessage(order: SubmittedOrder): string {
+  return buildDetailedWhatsappMessage(order);
+}
+
+function buildDetailedWhatsappMessage(order: SubmittedOrder): string {
+  const { pedido } = order;
+  const lines: string[] = [
+    "Hola, ya finalice mi pedido. Comparto los detalles para validar y continuar con el pago:",
+    "",
+    `Cliente: ${pedido.cliente.nombre.trim()}`,
+    `Telefono: ${formatPhoneNumber(pedido.cliente.indicativo, pedido.cliente.telefono)}`,
+    "",
+    "Pedido:",
+    ...pedido.productos.map((producto) => `- ${producto.cantidad} x ${producto.nombre}`),
+    "",
+    `Entrega: ${pedido.entrega.metodo === "domicilio" ? "Domicilio" : "Recoger en tienda"}`,
+  ];
+
+  if (pedido.entrega.metodo === "domicilio") {
+    const addressLine = [pedido.entrega.direccion.trim(), pedido.entrega.complemento.trim()]
+      .filter(Boolean)
+      .join(" - ");
+
+    lines.push(`Direccion: ${addressLine}`);
+
+    if (pedido.entrega.barrio.trim()) {
+      lines.push(`Barrio: ${pedido.entrega.barrio.trim()}`);
+    }
+  }
+
+  lines.push(`Fecha: ${pedido.entrega.fecha === "hoy" ? "Hoy" : pedido.entrega.fechaProgramada.trim()}`);
+  lines.push("");
+  lines.push(`Total: ${formatCOP(order.totalPrice)}`);
+  lines.push("");
+  lines.push("Quedo atento a la informacion de pago para completar el proceso.");
+
+  return lines.join("\n");
+}
+
+function normalizeWhatsappNumber(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 10) {
+    return `57${digits}`;
+  }
+
+  return digits;
+}
+
+function formatPhoneNumber(indicativo: string | null, telefono: string): string {
+  const safeIndicativo = (indicativo ?? "+57").trim();
+  const safeTelefono = telefono.trim();
+  return `${safeIndicativo} ${safeTelefono}`.trim();
 }

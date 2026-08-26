@@ -124,7 +124,7 @@ export function matchesCatalogSearch(product: Producto, query: string, categorie
     "";
   const searchText = [
     product.nombre,
-    product.codigo_producto ?? product.codigoProduct ?? "",
+    product.codigo_catalogo ?? product.codigo_producto ?? product.codigoProduct ?? "",
     resolvedCategoryName,
     product.descripcion ?? "",
   ]
@@ -142,7 +142,7 @@ export function matchesCatalogSearch(product: Producto, query: string, categorie
   }
 
   const nombre = normalizeSearchValue(product.nombre);
-  const codigo = normalizeSearchValue(product.codigo_producto ?? product.codigoProduct ?? "");
+  const codigo = normalizeSearchValue(product.codigo_catalogo ?? product.codigo_producto ?? product.codigoProduct ?? "");
   const categoria = normalizeSearchValue(resolvedCategoryName);
   const categoryIds = new Set(
     categories

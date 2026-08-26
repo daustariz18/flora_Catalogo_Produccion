@@ -18,8 +18,9 @@ describe("ProductCard", () => {
     const onOpenDetail = vi.fn();
     const product: Producto = {
       id: 5,
+      id_producto: 96,
       nombre: "Ramo Primavera",
-      codigo_producto: "FLORA-0001",
+      codigo_catalogo: "FLORA-0001",
       precio: 25000,
       imagen: "/ramo.png",
       imagen_sm: "/ramo-sm.png",
@@ -37,6 +38,7 @@ describe("ProductCard", () => {
     expect(onOpenDetail).toHaveBeenCalledTimes(1);
     expect(mocks.addItem).toHaveBeenCalledWith({
       id: 5,
+      id_producto: 96,
       nombre: "Ramo Primavera",
       precio: 25000,
       imagen: "/ramo.png",

@@ -43,6 +43,20 @@ const COMPANY_TRANSFER_ACCOUNTS: TransferAccount[] = [
 const WOMPI_CHECKOUT_URL =
   (import.meta.env.VITE_WOMPI_CHECKOUT_URL as string | undefined)?.trim() || "https://checkout.wompi.co/p/";
 
+function normalizeDeliveryShift(value: string): string {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized.startsWith("mañana") || normalized.startsWith("manana")) {
+    return "Mañana";
+  }
+
+  if (normalized.startsWith("tarde")) {
+    return "Tarde";
+  }
+
+  return value.trim();
+}
+
 function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
   for (const value of values) {
     const normalized = value?.trim();
@@ -849,12 +863,15 @@ function DeliveryStep({
               />
             </label>
 
-                        <label className="checkout-field">
-              <span>Rango de hora (opcional)</span>
-              <select value={pedidoState.entrega.rangoHora} onChange={(event) => updateEntrega("rangoHora", event.target.value)}>
+            <label className="checkout-field">
+              <span>Preferencia de entrega (opcional)</span>
+              <select
+                value={normalizeDeliveryShift(pedidoState.entrega.rangoHora)}
+                onChange={(event) => updateEntrega("rangoHora", event.target.value)}
+              >
                 <option value="">Seleccione...</option>
-                <option value="Mañana (8am - 12pm)">Mañana (8am - 12pm)</option>
-                <option value="Tarde (2pm - 6pm)">Tarde (2pm - 6pm)</option>
+                <option value="Mañana">Mañana</option>
+                <option value="Tarde">Tarde</option>
               </select>
             </label>
           </div>
@@ -992,7 +1009,7 @@ function ConfirmationStep({
   const deliveryLine = `${deliveryLabel} · ${deliveryTiming}`;
   const customerLine = `${pedidoState.cliente.nombre} · ${pedidoState.cliente.indicativo ?? "+57"} ${pedidoState.cliente.telefono}`;
   const addressLine = formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento);
-  const timeRangeLine = pedidoState.entrega.rangoHora.trim();
+  const deliveryShiftLine = normalizeDeliveryShift(pedidoState.entrega.rangoHora);
   const hasMessage = pedidoState.mensaje.texto.trim().length > 0 || pedidoState.mensaje.firma.trim().length > 0;
   const showTransferAccounts = paymentMethod === "transferencia" && transferAccounts.length > 0;
 
@@ -1061,10 +1078,10 @@ function ConfirmationStep({
                     <strong>{addressLine}</strong>
                   </p>
                 ) : null}
-                {timeRangeLine ? (
+                {deliveryShiftLine ? (
                   <p>
-                    <span>Rango de hora</span>
-                    <strong>{timeRangeLine}</strong>
+                    <span>Preferencia de entrega</span>
+                    <strong>{deliveryShiftLine}</strong>
                   </p>
                 ) : null}
                 {pedidoState.entrega.barrio.trim().length > 0 ? (
@@ -1530,8 +1547,8 @@ export function CheckoutPage() {
         direccion_entrega: formatDeliveryAddress(pedidoState.entrega.direccion, pedidoState.entrega.complemento),
         complementoEntrega: pedidoState.entrega.complemento,
         complemento_entrega: pedidoState.entrega.complemento,
-        rangoHora: pedidoState.entrega.rangoHora.trim(),
-        rango_hora: pedidoState.entrega.rangoHora.trim(),
+        rangoHora: normalizeDeliveryShift(pedidoState.entrega.rangoHora),
+        rango_hora: normalizeDeliveryShift(pedidoState.entrega.rangoHora),
         barrioEntrega: pedidoState.entrega.barrio,
         barrio_entrega: pedidoState.entrega.barrio,
         barrioEntregaID: pedidoState.entrega.barrioID,

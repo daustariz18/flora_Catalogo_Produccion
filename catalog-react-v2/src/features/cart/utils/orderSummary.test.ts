@@ -42,7 +42,7 @@ function buildSampleOrder(): SubmittedOrder {
         costoDomicilio: 0,
         fecha: "programada",
         fechaProgramada: "2026-04-30",
-        rangoHora: "Tarde (2pm - 6pm)",
+        rangoHora: "Tarde",
       },
       mensaje: {
         texto: "Feliz cumpleanos",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { formatCOP } from "../../../shared/utils/currency";
 import { buildTenantPath, resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
@@ -10,12 +10,17 @@ export function OrderSuccessPage() {
   const { tenantSlug = "" } = useParams();
   const navigate = useNavigate();
   const resolvedTenantSlug = resolveTenantSlug(tenantSlug);
+  const setActiveTenant = useCartStore((state) => state.setActiveTenant);
   const lastSubmittedOrder = useCartStore((state) => state.lastSubmittedOrder);
   const resetCheckoutFlow = useCartStore((state) => state.resetCheckoutFlow);
   const [order, setOrder] = useState<SubmittedOrder | null>(() =>
     isOrderForTenant(lastSubmittedOrder, resolvedTenantSlug) ? lastSubmittedOrder : null,
   );
   const [copied, setCopied] = useState(false);
+
+  useLayoutEffect(() => {
+    setActiveTenant(resolvedTenantSlug);
+  }, [resolvedTenantSlug, setActiveTenant]);
 
   useEffect(() => {
     storeTenantSlug(resolvedTenantSlug);
@@ -54,11 +59,14 @@ export function OrderSuccessPage() {
   const isTransferPending = order.paymentStatus === "pendiente_validacion";
   const isWompi = order.paymentMethod === "wompi";
   const isWompiPending = order.paymentStatus === "pendiente_pago";
+  const shouldShowWhatsappAction = order.paymentMethod === "transferencia" || order.paymentMethod === "efectivo";
   const paymentLabel = getPaymentMethodLabel(order.paymentMethod);
   const paymentWhatsappNumber = getPaymentWhatsappNumber(order);
-  const transferWhatsappHref = paymentWhatsappNumber
+  const orderWhatsappHref = paymentWhatsappNumber && shouldShowWhatsappAction
     ? `https://wa.me/${paymentWhatsappNumber}?text=${encodeURIComponent(getPaymentWhatsappMessage(order))}`
     : null;
+  const orderWhatsappLabel =
+    order.paymentMethod === "transferencia" ? "Enviar comprobante por WhatsApp" : "Enviar pedido por WhatsApp";
 
   async function handleCopySummary() {
     if (!order) {
@@ -167,9 +175,9 @@ export function OrderSuccessPage() {
               Continuar pago en Wompi
             </a>
           ) : null}
-          {isTransferPending && transferWhatsappHref ? (
-            <a className="cta success-link" href={transferWhatsappHref} target="_blank" rel="noreferrer">
-              Enviar comprobante por WhatsApp
+          {orderWhatsappHref ? (
+            <a className="cta success-link" href={orderWhatsappHref} target="_blank" rel="noreferrer">
+              {orderWhatsappLabel}
             </a>
           ) : null}
           <button type="button" className="cta" onClick={() => void handleCopySummary()}>

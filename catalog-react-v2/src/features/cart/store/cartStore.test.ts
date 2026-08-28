@@ -3,6 +3,8 @@ import { getCartTotalItems, useCartStore } from "./cartStore";
 
 function resetStore() {
   useCartStore.setState({
+    activeTenantSlug: "tenant-a",
+    draftsByTenant: {},
     pedidoState: {
       productos: [],
       subtotal: 0,
@@ -69,6 +71,44 @@ describe("cartStore", () => {
     expect(useCartStore.getState().pedidoState.productos[0].cantidad).toBe(2);
     expect(useCartStore.getState().pedidoState.subtotal).toBe(20000);
     expect(useCartStore.getState().pedidoState.total).toBe(20000);
+  });
+
+  it("keeps cart drafts isolated by tenant", () => {
+    const store = useCartStore.getState();
+
+    store.setActiveTenant("tenant-a");
+    store.addProduct({
+      id: 1,
+      nombre: "Producto Tenant A",
+      precio: 10000,
+      imagen: "/tenant-a.png",
+    });
+
+    expect(useCartStore.getState().pedidoState.productos).toEqual([
+      expect.objectContaining({ id: 1, nombre: "Producto Tenant A" }),
+    ]);
+
+    useCartStore.getState().setActiveTenant("tenant-b");
+
+    expect(useCartStore.getState().pedidoState.productos).toHaveLength(0);
+
+    useCartStore.getState().addProduct({
+      id: 1,
+      nombre: "Producto Tenant B",
+      precio: 20000,
+      imagen: "/tenant-b.png",
+    });
+
+    expect(useCartStore.getState().pedidoState.productos).toEqual([
+      expect.objectContaining({ id: 1, nombre: "Producto Tenant B" }),
+    ]);
+
+    useCartStore.getState().setActiveTenant("tenant-a");
+
+    expect(useCartStore.getState().pedidoState.productos).toEqual([
+      expect.objectContaining({ id: 1, nombre: "Producto Tenant A" }),
+    ]);
+    expect(useCartStore.getState().pedidoState.subtotal).toBe(10000);
   });
 
   it("selects a barrio and updates delivery total", () => {

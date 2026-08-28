@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { formatCOP } from "../../../shared/utils/currency";
 import { buildTenantPath, resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
@@ -8,6 +8,7 @@ import { getCartTotalItems, getCartTotalPrice, useCartStore } from "../store/car
 export function CartPage() {
   const { tenantSlug = "" } = useParams();
   const resolvedTenantSlug = resolveTenantSlug(tenantSlug);
+  const setActiveTenant = useCartStore((state) => state.setActiveTenant);
   const items = useCartStore((state) => state.pedidoState.productos);
   const increaseQty = useCartStore((state) => state.increaseQty);
   const decreaseQty = useCartStore((state) => state.decreaseQty);
@@ -16,6 +17,10 @@ export function CartPage() {
   const totalPrice = getCartTotalPrice(items);
   const catalogPath = buildTenantPath(resolvedTenantSlug);
   const checkoutPath = buildTenantPath(resolvedTenantSlug, "/checkout");
+
+  useLayoutEffect(() => {
+    setActiveTenant(resolvedTenantSlug);
+  }, [resolvedTenantSlug, setActiveTenant]);
 
   useEffect(() => {
     storeTenantSlug(resolvedTenantSlug);

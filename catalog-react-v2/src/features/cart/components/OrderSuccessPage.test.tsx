@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 const mocks = vi.hoisted(() => ({
   resetCheckoutFlow: vi.fn(),
+  setActiveTenant: vi.fn(),
   setTenantSlug: vi.fn(),
   lastSubmittedOrder: {
     id: "PED-123",
@@ -69,6 +70,7 @@ vi.mock("../store/cartStore", () => ({
     selector({
       lastSubmittedOrder: mocks.lastSubmittedOrder,
       resetCheckoutFlow: mocks.resetCheckoutFlow,
+      setActiveTenant: mocks.setActiveTenant,
     }),
 }));
 
@@ -83,8 +85,11 @@ import { OrderSuccessPage } from "./OrderSuccessPage";
 describe("OrderSuccessPage", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     mocks.lastSubmittedOrder.companySlug = "flora";
+    mocks.lastSubmittedOrder.paymentMethod = "transferencia";
+    mocks.lastSubmittedOrder.paymentStatus = "pendiente_validacion";
   });
 
   it("resets the checkout flow after the success screen mounts", async () => {
@@ -99,6 +104,7 @@ describe("OrderSuccessPage", () => {
     expect(screen.getByRole("heading", { name: "PED-123" })).toBeInTheDocument();
 
     await waitFor(() => {
+      expect(mocks.setActiveTenant).toHaveBeenCalledWith("flora");
       expect(mocks.resetCheckoutFlow).toHaveBeenCalledTimes(1);
     });
   });
@@ -160,6 +166,28 @@ describe("OrderSuccessPage", () => {
     expect(message).toContain("Telefono: +57 3001234567");
     expect(message).toContain("- 1 x Ramo Rosa");
     expect(message).toMatch(/Total: \$\s*30\.000/u);
+  });
+
+  it("lets cash orders send the order summary by WhatsApp", () => {
+    mocks.lastSubmittedOrder.companySlug = "join-data";
+    mocks.lastSubmittedOrder.paymentMethod = "efectivo";
+    mocks.lastSubmittedOrder.paymentStatus = "confirmado";
+
+    render(
+      <MemoryRouter initialEntries={["/catalogo/join-data/pedido-exitoso"]}>
+        <Routes>
+          <Route path="/catalogo/:tenantSlug/pedido-exitoso" element={<OrderSuccessPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const href = screen.getByRole("link", { name: "Enviar pedido por WhatsApp" }).getAttribute("href") ?? "";
+    const message = new URL(href).searchParams.get("text") ?? "";
+
+    expect(href).toContain("https://wa.me/573103489766");
+    expect(message).toContain("Hola, ya finalice mi pedido.");
+    expect(message).toContain("Cliente: Ana");
+    expect(message).toContain("- 1 x Ramo Rosa");
   });
 
   it("redirects to the submitted order tenant when the success URL has another slug", async () => {

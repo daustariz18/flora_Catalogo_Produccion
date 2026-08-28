@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import { useParams } from "react-router-dom";
 import type { Producto } from "../../../shared/types/catalog";
 import { useCartStore } from "../../cart/store/cartStore";
@@ -48,11 +48,16 @@ export function CatalogPage() {
   } = usePublicCatalog(activeTenant, selectedCategory, searchQuery, sortMode);
 
   const addItem = useCartStore((state) => state.addItem);
+  const setActiveTenant = useCartStore((state) => state.setActiveTenant);
   const setAvailableBarrios = useCartStore((state) => state.setAvailableBarrios);
   const effectiveSelectedCategory =
     selectedCategory !== null && !categories.some((category) => category.id === selectedCategory)
       ? null
       : selectedCategory;
+
+  useLayoutEffect(() => {
+    setActiveTenant(activeTenant);
+  }, [activeTenant, setActiveTenant]);
 
   useEffect(() => {
     storeTenantSlug(activeTenant);

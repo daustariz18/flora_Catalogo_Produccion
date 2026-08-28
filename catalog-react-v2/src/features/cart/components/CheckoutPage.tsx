@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { countryCodes } from "../../../shared/utils/countryCodes";
 import { formatCOP } from "../../../shared/utils/currency";
@@ -109,8 +109,8 @@ const DEFAULT_PAYMENT_OPTIONS: CheckoutPaymentOption[] = [
     value: "efectivo",
     title: "Efectivo",
     caption: "Pago contra entrega (si aplica)",
-    cta: "CONFIRMAR PEDIDO",
-    subtitle: "Registrar pedido",
+    cta: "CONFIRMAR Y ENVIAR POR WHATSAPP",
+    subtitle: "Enviar resumen del pedido",
   },
 ];
 
@@ -1035,7 +1035,7 @@ function ConfirmationStep({
       ? ["Crearemos tu pedido antes de abrir Wompi", "El pago se valida de forma segura"]
       : paymentMethod === "transferencia"
         ? ["Podrás enviar el comprobante por WhatsApp al finalizar"]
-        : ["El pago queda marcado para gestionarse contra entrega"]);
+        : ["Podrás enviar el resumen del pedido por WhatsApp al finalizar"]);
   const selectedPaymentTitle = selectedPaymentOption?.title ?? "";
 
   const deliveryLabel =
@@ -1192,6 +1192,11 @@ function ConfirmationStep({
                         Verifica el comprobante por WhatsApp antes de confirmar.
                       </small>
                     ) : null}
+                    {option.value === "efectivo" ? (
+                      <small className="checkout-field-help">
+                        Enviaremos el resumen del pedido por WhatsApp al finalizar.
+                      </small>
+                    ) : null}
                   </button>
                   {isTransfer && showTransferAccounts ? (
                     <div className="transfer-inline-card" aria-live="polite">
@@ -1265,6 +1270,7 @@ export function CheckoutPage() {
     "idle",
   );
   const pedidoState = useCartStore((state) => state.pedidoState);
+  const setActiveTenant = useCartStore((state) => state.setActiveTenant);
   const updateCliente = useCartStore((state) => state.updateCliente);
   const updateFacturacion = useCartStore((state) => state.updateFacturacion);
   const updateEntrega = useCartStore((state) => state.updateEntrega);
@@ -1297,6 +1303,10 @@ export function CheckoutPage() {
   const canContinueStep3 = isMessageStepComplete(pedidoState.mensaje, requiresMessageSignature);
 
   const stepTitles = useMemo(() => ["Información del cliente", "Información de entrega", "Mensaje", "Confirmar"], []);
+
+  useLayoutEffect(() => {
+    setActiveTenant(resolvedTenantSlug);
+  }, [resolvedTenantSlug, setActiveTenant]);
 
   useEffect(() => {
     storeTenantSlug(resolvedTenantSlug);

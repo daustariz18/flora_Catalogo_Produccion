@@ -156,9 +156,9 @@ function toCompany(payload: PublicCatalogoResponse, tenantSlug: string): Empresa
 export function mapCategories(payload: PublicCatalogoResponse, products: Producto[]): Categoria[] {
   if (payload.categorias.length > 0) {
     return payload.categorias.map((category) => ({
-      id: category.id,
+      id: toPositiveNumber(category.id ?? category.id_categoria) ?? 0,
       nombre: category.name?.trim() || category.nombre?.trim() || "Sin categoria",
-      orden_catalogo: category.orden_catalogo ?? null,
+      orden_catalogo: normalizeCatalogOrder(category.orden_catalogo ?? category.ordenCatalogo),
     }));
   }
 
@@ -191,9 +191,9 @@ export function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: s
 
     if (categoryName) {
       categoryIndex.set(normalizeCategoryKey(categoryName), {
-        id: category.id,
+        id: toPositiveNumber(category.id ?? category.id_categoria) ?? 0,
         nombre: categoryName,
-        orden_catalogo: category.orden_catalogo ?? null,
+        orden_catalogo: normalizeCatalogOrder(category.orden_catalogo ?? category.ordenCatalogo),
       });
     }
   }
@@ -239,4 +239,10 @@ export function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: s
         descripcion: item.descripcion ?? "Descripcion no disponible.",
       };
     });
+}
+
+function normalizeCatalogOrder(value: unknown): number | null {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }

@@ -371,10 +371,16 @@ function mapCompany(payload: PublicCompanyResponse | undefined, tenantSlug: stri
 
 function mapCategory(payload: PublicCategoryResponse): Categoria {
   return {
-    id: payload.id,
+    id: toPositiveNumber(payload.id ?? payload.id_categoria) ?? 0,
     nombre: payload.name?.trim() || payload.nombre?.trim() || "Sin categoria",
-    orden_catalogo: payload.orden_catalogo ?? null,
+    orden_catalogo: normalizeCatalogOrder(payload.orden_catalogo ?? payload.ordenCatalogo),
   };
+}
+
+function normalizeCatalogOrder(value: unknown): number | null {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function toPositiveNumber(value: unknown): number | null {

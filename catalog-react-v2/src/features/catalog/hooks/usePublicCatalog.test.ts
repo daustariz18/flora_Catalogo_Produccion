@@ -28,12 +28,17 @@ describe("usePublicCatalog category resolution", () => {
     const categories = resolvePublicCategories(
       [
         { id: 1, name: "Personalizado", orden_catalogo: 1 },
+        { id_categoria: 81, name: "Amor & Amistad", ordenCatalogo: 2 },
         { id: 2, name: "Flora Box", orden_catalogo: 4 },
       ],
       products,
     );
 
-    expect(categories.map((category) => category.nombre)).toEqual(["Personalizado", "Flora Box"]);
+    expect(categories.map((category) => category.nombre)).toEqual([
+      "Personalizado",
+      "Amor & Amistad",
+      "Flora Box",
+    ]);
   });
 
   it("falls back to product categories only when backend categories are empty", () => {

@@ -24,6 +24,7 @@ describe("publicCategoriesApi", () => {
       createJsonResponse({
         data: [
           { id: 1, nombre: "Personalizado", activo: true },
+          { id_categoria: 81, nombre: "Amor & Amistad", ordenCatalogo: 2, activo: true },
           { id: 2, nombre: "Oculta", activo: false },
           { id: 3, nombre: "Deshabilitada", enabled: false },
           { id: 4, nombre: "Inactiva por estado", estado: "inactiva" },
@@ -35,6 +36,10 @@ describe("publicCategoriesApi", () => {
 
     const response = await fetchPublicCategories("flora");
 
-    expect(response.map((category) => category.nombre)).toEqual(["Personalizado", "Flora Box"]);
+    expect(response.map((category) => category.nombre)).toEqual([
+      "Personalizado",
+      "Amor & Amistad",
+      "Flora Box",
+    ]);
   });
 });

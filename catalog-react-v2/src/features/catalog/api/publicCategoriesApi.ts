@@ -1,10 +1,12 @@
 import { fetchPublicApiJson } from "../../../shared/api/publicApi";
 
 export interface PublicCategoryResponse {
-  id: number;
+  id?: number;
+  id_categoria?: number | null;
   name?: string | null;
   nombre?: string | null;
   orden_catalogo?: number | null;
+  ordenCatalogo?: number | null;
   active?: boolean | null;
   activo?: boolean | null;
   enabled?: boolean | null;

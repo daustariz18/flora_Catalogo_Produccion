@@ -3,21 +3,21 @@ import type { Categoria, Producto } from "../../../shared/types/catalog";
 import { sortCategoriesForDisplay, sortProductsForDisplay } from "./catalogDisplay";
 
 describe("catalogDisplay", () => {
-  it("puts personalized categories first", () => {
+  it("sorts categories by catalog order with nulls last and id as fallback", () => {
     const categories: Categoria[] = [
-      { id: 2, nombre: "Flora Box" },
-      { id: 1, nombre: "Arreglos personalizados" },
-      { id: 4, nombre: "Flora Madres" },
-      { id: 3, nombre: "Condolencias" },
-      { id: 5, nombre: "Adicionales" },
+      { id: 20, nombre: "Flora Box", orden_catalogo: 2 },
+      { id: 11, nombre: "Rosas", orden_catalogo: 1 },
+      { id: 15, nombre: "Adicionales", orden_catalogo: null },
+      { id: 10, nombre: "Orquideas", orden_catalogo: 2 },
+      { id: 12, nombre: "Sin orden" },
     ];
 
     expect(sortCategoriesForDisplay(categories).map((category) => category.nombre)).toEqual([
-      "Arreglos personalizados",
+      "Rosas",
+      "Orquideas",
       "Flora Box",
-      "Condolencias",
+      "Sin orden",
       "Adicionales",
-      "Flora Madres",
     ]);
   });
 
@@ -44,8 +44,8 @@ describe("catalogDisplay", () => {
 
     expect(sortProductsForDisplay(products).map((product) => product.nombre)).toEqual([
       "Arreglo Personalizado Deluxe",
-      "Rosa Roja",
       "Arreglo Madre 2026",
+      "Rosa Roja",
     ]);
   });
 
@@ -201,12 +201,13 @@ describe("catalogDisplay", () => {
 
     expect(sortCategoriesForDisplay(categories).map((category) => category.nombre)).toEqual([
       "Personalizado",
+      "Flora Madres",
       "Flora Box",
       "Flora Canastos",
       "Flora Bouquets",
       "Corazones",
-      "Maderas",
       "Ceramicas & Vidrios",
+      "Maderas",
       "Ancheta",
       "Condolencias",
       "Flora Mujer",
@@ -215,7 +216,6 @@ describe("catalogDisplay", () => {
       "Bodas",
       "Dia Mujer",
       "Evento",
-      "Flora Madres",
     ]);
     expect(sortProductsForDisplay(products).map((product) => product.nombre)).toEqual([
       "Producto Personalizado",

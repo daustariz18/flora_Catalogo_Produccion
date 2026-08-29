@@ -155,7 +155,11 @@ function toCompany(payload: PublicCatalogoResponse, tenantSlug: string): Empresa
 
 export function mapCategories(payload: PublicCatalogoResponse, products: Producto[]): Categoria[] {
   if (payload.categorias.length > 0) {
-    return payload.categorias;
+    return payload.categorias.map((category) => ({
+      id: category.id,
+      nombre: category.name?.trim() || category.nombre?.trim() || "Sin categoria",
+      orden_catalogo: category.orden_catalogo ?? null,
+    }));
   }
 
   const byId = new Map<number, Categoria>();
@@ -171,6 +175,7 @@ export function mapCategories(payload: PublicCatalogoResponse, products: Product
     byId.set(categoryId, {
       id: categoryId,
       nombre: name,
+      orden_catalogo: null,
     });
   }
 
@@ -182,7 +187,15 @@ export function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: s
   const categoryIndex = new Map<string, Categoria>();
 
   for (const category of payload.categorias) {
-    categoryIndex.set(normalizeCategoryKey(category.nombre), category);
+    const categoryName = category.name?.trim() || category.nombre?.trim();
+
+    if (categoryName) {
+      categoryIndex.set(normalizeCategoryKey(categoryName), {
+        id: category.id,
+        nombre: categoryName,
+        orden_catalogo: category.orden_catalogo ?? null,
+      });
+    }
   }
 
   return [...items]

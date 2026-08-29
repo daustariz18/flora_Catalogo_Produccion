@@ -9,6 +9,7 @@ export interface Empresa {
 export interface Categoria {
   id: number;
   nombre: string;
+  orden_catalogo?: number | null;
 }
 
 export interface Producto {

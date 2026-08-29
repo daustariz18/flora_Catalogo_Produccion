@@ -67,7 +67,9 @@ export type PublicEmpresa = {
 
 export type PublicCategoria = {
   id: number;
-  nombre: string;
+  name?: string | null;
+  nombre?: string | null;
+  orden_catalogo?: number | null;
   active?: boolean | null;
   activo?: boolean | null;
   enabled?: boolean | null;

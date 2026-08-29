@@ -1,4 +1,4 @@
-import type { CatalogResponse, Producto } from "../../../shared/types/catalog";
+import type { CatalogResponse, Categoria, Producto } from "../../../shared/types/catalog";
 import {
   getCatalogoPublico,
   type PublicCatalogoResponse,
@@ -109,12 +109,16 @@ function normalizeProduct(product: Partial<Producto>): Producto {
   };
 }
 
-function mapCategories(payload: PublicCatalogoResponse, products: Producto[]) {
+function mapCategories(payload: PublicCatalogoResponse, products: Producto[]): Categoria[] {
   if (payload.categorias.length > 0) {
-    return payload.categorias;
+    return payload.categorias.map((category) => ({
+      id: category.id,
+      nombre: category.name?.trim() || category.nombre?.trim() || "Sin categoria",
+      orden_catalogo: category.orden_catalogo ?? null,
+    }));
   }
 
-  const byId = new Map<number, { id: number; nombre: string }>();
+  const byId = new Map<number, Categoria>();
 
   for (const product of products) {
     const categoryId = toPositiveNumber(product.id_categoria ?? product.categoriaID);
@@ -127,6 +131,7 @@ function mapCategories(payload: PublicCatalogoResponse, products: Producto[]) {
     byId.set(categoryId, {
       id: categoryId,
       nombre: name,
+      orden_catalogo: null,
     });
   }
 
@@ -138,7 +143,14 @@ function mapPublicProducts(payload: PublicCatalogoResponse, tenantSlug: string):
   const categoryIndex = new Map<string, { id: number; nombre: string }>();
 
   for (const category of payload.categorias) {
-    categoryIndex.set(normalizeCategoryKey(category.nombre), category);
+    const categoryName = category.name?.trim() || category.nombre?.trim();
+
+    if (categoryName) {
+      categoryIndex.set(normalizeCategoryKey(categoryName), {
+        id: category.id,
+        nombre: categoryName,
+      });
+    }
   }
 
   return [...items]

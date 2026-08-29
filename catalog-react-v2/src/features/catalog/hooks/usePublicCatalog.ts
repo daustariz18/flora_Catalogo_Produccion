@@ -95,10 +95,7 @@ export function usePublicCatalog(
   }, [allProductsQuery.data, normalizedTenant, productsQuery.data?.pages, shouldLoadAllProducts]);
 
   const categories = useMemo(() => {
-    const mapped = (categoriesQuery.data ?? []).map(mapCategory);
-    const derived = allProducts.map(productToCategory);
-
-    return sortCategoriesForDisplay(mergeCategories(derived, mapped));
+    return resolvePublicCategories(categoriesQuery.data ?? [], allProducts);
   }, [allProducts, categoriesQuery.data]);
 
   const filteredProducts = useMemo(() => {
@@ -294,6 +291,19 @@ function productToCategory(product: Producto): Categoria | null {
   };
 }
 
+export function resolvePublicCategories(
+  backendCategories: PublicCategoryResponse[],
+  products: Producto[],
+): Categoria[] {
+  const mapped = backendCategories.map(mapCategory);
+
+  if (mapped.length > 0) {
+    return sortCategoriesForDisplay(mapped);
+  }
+
+  return sortCategoriesForDisplay(mergeCategories(products.map(productToCategory)));
+}
+
 function mergeCategories(...categoryGroups: Array<Array<Categoria | null>>): Categoria[] {
   const byKey = new Map<string, Categoria>();
 
@@ -312,6 +322,7 @@ function mergeCategories(...categoryGroups: Array<Array<Categoria | null>>): Cat
     byKey.set(key, {
       id: category.id,
       nombre: name,
+      orden_catalogo: category.orden_catalogo ?? null,
     });
   }
 
@@ -362,6 +373,7 @@ function mapCategory(payload: PublicCategoryResponse): Categoria {
   return {
     id: payload.id,
     nombre: payload.name?.trim() || payload.nombre?.trim() || "Sin categoria",
+    orden_catalogo: payload.orden_catalogo ?? null,
   };
 }
 

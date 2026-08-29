@@ -78,16 +78,22 @@ function getCategoryPriority(value: string): number {
 
 export function sortCategoriesForDisplay(categories: Categoria[]): Categoria[] {
   return categories
-    .map((category, index) => ({ category, index }))
+    .map((category) => ({ category }))
     .sort((a, b) => {
-      const aPriority = getCategoryPriority(a.category.nombre);
-      const bPriority = getCategoryPriority(b.category.nombre);
+      const aOrder = a.category.orden_catalogo;
+      const bOrder = b.category.orden_catalogo;
+      const aHasOrder = aOrder !== null && aOrder !== undefined;
+      const bHasOrder = bOrder !== null && bOrder !== undefined;
 
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
+      if (aHasOrder && bHasOrder && aOrder !== bOrder) {
+        return aOrder - bOrder;
       }
 
-      return a.index - b.index;
+      if (aHasOrder !== bHasOrder) {
+        return aHasOrder ? -1 : 1;
+      }
+
+      return a.category.id - b.category.id;
     })
     .map(({ category }) => category);
 }

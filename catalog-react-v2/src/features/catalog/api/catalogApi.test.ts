@@ -46,8 +46,8 @@ describe("catalogApi", () => {
     const catalog = await fetchCatalogByEmpresa("flora");
 
     expect(catalog.categorias).toEqual([
-      { id: 10, nombre: "Personalizado" },
-      { id: 20, nombre: "Flora Box" },
+      { id: 10, nombre: "Personalizado", orden_catalogo: null },
+      { id: 20, nombre: "Flora Box", orden_catalogo: null },
     ]);
     expect(catalog.productos).toHaveLength(2);
     expect(catalog.productos[0]?.categoriaID).toBe(10);

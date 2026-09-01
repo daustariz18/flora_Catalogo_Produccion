@@ -798,7 +798,7 @@ function DeliveryStep({
               </label>
 
               <label className="checkout-field checkout-field-wide">
-                <span>Barrios de Entrega *</span>
+                <span>Barrio o municipio del destinatario *</span>
                 <div className="barrio-combobox">
                   <input
                     className="barrio-combobox-input"
@@ -835,7 +835,7 @@ function DeliveryStep({
                         setShowBarrioOptions(false);
                       }
                     }}
-                    placeholder="Busca tu barrio"
+                    placeholder="Busca el lugar de entrega"
                     autoComplete="off"
                     required={isDomicilio}
                     aria-required={isDomicilio}
@@ -869,11 +869,11 @@ function DeliveryStep({
                     </div>
                   ) : null}
                 </div>
-                <small className="checkout-field-help">
-                  {pedidoState.entrega.barrioID !== null
-                    ? `Costo de domicilio: ${formatCOP(pedidoState.entrega.costoDomicilio)}`
-                    : "Escribe para filtrar y elige un barrio existente de la lista."}
-                </small>
+                {pedidoState.entrega.barrioID !== null ? (
+                  <small className="checkout-field-help">
+                    Costo de domicilio: {formatCOP(pedidoState.entrega.costoDomicilio)}
+                  </small>
+                ) : null}
               </label>
             </>
           ) : null}

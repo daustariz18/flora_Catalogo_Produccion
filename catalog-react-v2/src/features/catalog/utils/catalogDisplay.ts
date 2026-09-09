@@ -1,5 +1,9 @@
 import type { Categoria, Producto } from "../../../shared/types/catalog";
 
+interface CatalogDisplayOptions {
+  companyId?: number | string | null;
+}
+
 function normalizeValue(value: string): string {
   return value
     .normalize("NFD")
@@ -76,10 +80,58 @@ function getCategoryPriority(value: string): number {
   return orderedCategories.length + 1;
 }
 
-export function sortCategoriesForDisplay(categories: Categoria[]): Categoria[] {
+function normalizeCompanyId(value: number | string | null | undefined): number | null {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCompanyThreeCategoryPriority(value: string): number | null {
+  const normalized = normalizeCategoryOrderKey(value);
+  const orderedCategories = [
+    ["personalizado", "arreglospersonalizados"],
+    ["amoryamistad", "amoryamigos"],
+    ["amarillo", "amarillos"],
+  ] as const;
+
+  for (let index = 0; index < orderedCategories.length; index += 1) {
+    if (orderedCategories[index].some((candidate) => normalized.includes(candidate))) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+export function getCompanyCategoryPriority(value: string, companyId: number | string | null | undefined): number | null {
+  if (normalizeCompanyId(companyId) === 3) {
+    return getCompanyThreeCategoryPriority(value);
+  }
+
+  return null;
+}
+
+export function sortCategoriesForDisplay(categories: Categoria[], options: CatalogDisplayOptions = {}): Categoria[] {
   return categories
     .map((category) => ({ category }))
     .sort((a, b) => {
+      const aCompanyPriority = getCompanyCategoryPriority(a.category.nombre, options.companyId);
+      const bCompanyPriority = getCompanyCategoryPriority(b.category.nombre, options.companyId);
+
+      if (aCompanyPriority !== null || bCompanyPriority !== null) {
+        if (aCompanyPriority === null) {
+          return 1;
+        }
+
+        if (bCompanyPriority === null) {
+          return -1;
+        }
+
+        if (aCompanyPriority !== bCompanyPriority) {
+          return aCompanyPriority - bCompanyPriority;
+        }
+      }
+
       const aOrder = a.category.orden_catalogo;
       const bOrder = b.category.orden_catalogo;
       const aHasOrder = aOrder !== null && aOrder !== undefined;
@@ -98,10 +150,27 @@ export function sortCategoriesForDisplay(categories: Categoria[]): Categoria[] {
     .map(({ category }) => category);
 }
 
-export function sortProductsForDisplay(products: Producto[]): Producto[] {
+export function sortProductsForDisplay(products: Producto[], options: CatalogDisplayOptions = {}): Producto[] {
   return products
     .map((product, index) => ({ product, index }))
     .sort((a, b) => {
+      const aCompanyPriority = getCompanyCategoryPriority(a.product.categoriaNombre ?? "", options.companyId);
+      const bCompanyPriority = getCompanyCategoryPriority(b.product.categoriaNombre ?? "", options.companyId);
+
+      if (aCompanyPriority !== null || bCompanyPriority !== null) {
+        if (aCompanyPriority === null) {
+          return 1;
+        }
+
+        if (bCompanyPriority === null) {
+          return -1;
+        }
+
+        if (aCompanyPriority !== bCompanyPriority) {
+          return aCompanyPriority - bCompanyPriority;
+        }
+      }
+
       const aPriority = getCategoryPriority(a.product.categoriaNombre ?? "");
       const bPriority = getCategoryPriority(b.product.categoriaNombre ?? "");
 

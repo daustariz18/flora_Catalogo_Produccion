@@ -2,6 +2,8 @@ import { fetchPublicApiJson } from "../../../shared/api/publicApi";
 
 export interface PublicCompanyResponse {
   id?: number;
+  empresa_id?: number | null;
+  empresaID?: number | null;
   nombre: string;
   logo_url?: string | null;
   logoUrl?: string | null;

@@ -49,6 +49,55 @@ describe("catalogDisplay", () => {
     ]);
   });
 
+  it("prioritizes personalized, amor amistad, and amarillo for company 3", () => {
+    const categories: Categoria[] = [
+      { id: 10, nombre: "Rosas", orden_catalogo: 1 },
+      { id: 20, nombre: "Amarillo", orden_catalogo: 9 },
+      { id: 30, nombre: "Amor & Amistad", orden_catalogo: 8 },
+      { id: 40, nombre: "Personalizado", orden_catalogo: 7 },
+    ];
+    const products: Producto[] = [
+      { id: 1, nombre: "Rosas A", precio: 10000, imagen: "/rosas.png", categoriaID: 10, categoriaNombre: "Rosas" },
+      {
+        id: 2,
+        nombre: "Amarillo A",
+        precio: 10000,
+        imagen: "/amarillo.png",
+        categoriaID: 20,
+        categoriaNombre: "Amarillo",
+      },
+      {
+        id: 3,
+        nombre: "Amor A",
+        precio: 10000,
+        imagen: "/amor.png",
+        categoriaID: 30,
+        categoriaNombre: "Amor & Amistad",
+      },
+      {
+        id: 4,
+        nombre: "Personalizado A",
+        precio: 10000,
+        imagen: "/personalizado.png",
+        categoriaID: 40,
+        categoriaNombre: "Personalizado",
+      },
+    ];
+
+    expect(sortCategoriesForDisplay(categories, { companyId: 3 }).map((category) => category.nombre)).toEqual([
+      "Personalizado",
+      "Amor & Amistad",
+      "Amarillo",
+      "Rosas",
+    ]);
+    expect(sortProductsForDisplay(products, { companyId: 3 }).map((product) => product.nombre)).toEqual([
+      "Personalizado A",
+      "Amor A",
+      "Amarillo A",
+      "Rosas A",
+    ]);
+  });
+
   it("keeps backend order for the remaining categories and products", () => {
     const categories: Categoria[] = [
       { id: 10, nombre: "Personalizado" },

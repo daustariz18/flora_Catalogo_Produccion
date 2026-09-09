@@ -84,4 +84,76 @@ describe("catalogApi", () => {
     expect(products[0]?.id_categoria).toBe(77);
     expect(products[0]?.categoriaNombre).toBe("Personalizado");
   });
+
+  it("prioritizes personalized, amor amistad, and amarillo for empresa 3", async () => {
+    vi.mocked(getCatalogoPublico).mockResolvedValueOnce({
+      empresa: {
+        id: 3,
+        nombre: "Flora",
+        logoUrl: null,
+        colorPrimario: "#d94b8a",
+      },
+      categorias: [
+        { id: 10, nombre: "Rosas", orden_catalogo: 1 },
+        { id: 20, nombre: "Amarillo", orden_catalogo: 9 },
+        { id: 30, nombre: "Amor & Amistad", orden_catalogo: 8 },
+        { id: 40, nombre: "Personalizado", orden_catalogo: 7 },
+      ],
+      productos: [
+        {
+          id: 1,
+          id_producto: 1,
+          nombre: "Rosas A",
+          precio: "10000",
+          descripcion: null,
+          imagen_url: null,
+          nombre_categoria: "Rosas",
+        },
+        {
+          id: 2,
+          id_producto: 2,
+          nombre: "Amarillo A",
+          precio: "10000",
+          descripcion: null,
+          imagen_url: null,
+          nombre_categoria: "Amarillo",
+        },
+        {
+          id: 3,
+          id_producto: 3,
+          nombre: "Amor A",
+          precio: "10000",
+          descripcion: null,
+          imagen_url: null,
+          nombre_categoria: "Amor & Amistad",
+        },
+        {
+          id: 4,
+          id_producto: 4,
+          nombre: "Personalizado A",
+          precio: "10000",
+          descripcion: null,
+          imagen_url: null,
+          nombre_categoria: "Personalizado",
+        },
+      ],
+      barrios: [],
+    });
+
+    const catalog = await fetchCatalogByEmpresa("3");
+
+    expect(catalog.empresa.id).toBe(3);
+    expect(catalog.categorias.map((category) => category.nombre)).toEqual([
+      "Personalizado",
+      "Amor & Amistad",
+      "Amarillo",
+      "Rosas",
+    ]);
+    expect(catalog.productos.map((product) => product.nombre)).toEqual([
+      "Personalizado A",
+      "Amor A",
+      "Amarillo A",
+      "Rosas A",
+    ]);
+  });
 });

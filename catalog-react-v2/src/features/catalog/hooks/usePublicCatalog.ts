@@ -3,7 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { Categoria, Empresa, Producto } from "../../../shared/types/catalog";
 import type { ProductSortMode } from "../components/ProductGrid";
 import { resolveProductImageUrl } from "../utils/cloudfront";
-import { matchesCatalogSearch, sortCategoriesForDisplay, sortProductsForDisplay } from "../utils/catalogDisplay";
+import {
+  getCompanyCategoryPriority,
+  matchesCatalogSearch,
+  sortCategoriesForDisplay,
+  sortProductsForDisplay,
+} from "../utils/catalogDisplay";
 import {
   fetchPublicProductDetail,
   fetchPublicProductsPage,
@@ -94,9 +99,14 @@ export function usePublicCatalog(
     return sourceProducts?.map((item) => mapListProduct(item, normalizedTenant)) ?? [];
   }, [allProductsQuery.data, normalizedTenant, productsQuery.data?.pages, shouldLoadAllProducts]);
 
+  const company = useMemo(
+    () => mapCompany(companyQuery.data, normalizedTenant),
+    [companyQuery.data, normalizedTenant],
+  );
+
   const categories = useMemo(() => {
-    return resolvePublicCategories(categoriesQuery.data ?? [], allProducts);
-  }, [allProducts, categoriesQuery.data]);
+    return resolvePublicCategories(categoriesQuery.data ?? [], allProducts, company.id);
+  }, [allProducts, categoriesQuery.data, company.id]);
 
   const filteredProducts = useMemo(() => {
     return allProducts.filter(
@@ -107,8 +117,8 @@ export function usePublicCatalog(
   }, [allProducts, categories, normalizedSearchQuery, selectedCategory]);
 
   const allSortedProducts = useMemo(() => {
-    return sortProducts(filteredProducts, sortMode);
-  }, [filteredProducts, sortMode]);
+    return sortProducts(filteredProducts, sortMode, company.id);
+  }, [company.id, filteredProducts, sortMode]);
 
   const products = useMemo(() => {
     if (!shouldLoadAllProducts) {
@@ -118,10 +128,6 @@ export function usePublicCatalog(
     return allSortedProducts.slice(0, sortedVisibleCount);
   }, [allSortedProducts, shouldLoadAllProducts, sortedVisibleCount]);
 
-  const company = useMemo(
-    () => mapCompany(companyQuery.data, normalizedTenant),
-    [companyQuery.data, normalizedTenant],
-  );
   const total = shouldLoadAllProducts ? allSortedProducts.length : productsQuery.data?.pages[0]?.total ?? products.length;
   const error =
     companyQuery.error instanceof Error
@@ -200,12 +206,29 @@ function normalizeSortCode(product: Producto): string {
   return normalizeSortName(product.codigo_catalogo ?? product.codigo_producto ?? product.codigoProduct ?? String(product.id_producto ?? product.id));
 }
 
-function sortProducts(products: Producto[], sortMode: ProductSortMode): Producto[] {
-  const relevanceSortedProducts = sortProductsForDisplay(products);
+function sortProducts(products: Producto[], sortMode: ProductSortMode, companyId?: number | string | null): Producto[] {
+  const relevanceSortedProducts = sortProductsForDisplay(products, { companyId });
 
   return relevanceSortedProducts
     .map((product, index) => ({ product, index }))
     .sort((a, b) => {
+      const aCompanyPriority = getCompanyCategoryPriority(a.product.categoriaNombre ?? "", companyId);
+      const bCompanyPriority = getCompanyCategoryPriority(b.product.categoriaNombre ?? "", companyId);
+
+      if (aCompanyPriority !== null || bCompanyPriority !== null) {
+        if (aCompanyPriority === null) {
+          return 1;
+        }
+
+        if (bCompanyPriority === null) {
+          return -1;
+        }
+
+        if (aCompanyPriority !== bCompanyPriority) {
+          return aCompanyPriority - bCompanyPriority;
+        }
+      }
+
       if (sortMode === "code-asc") {
         const personalizedComparison = Number(isPersonalizedProduct(b.product)) - Number(isPersonalizedProduct(a.product));
 
@@ -294,14 +317,15 @@ function productToCategory(product: Producto): Categoria | null {
 export function resolvePublicCategories(
   backendCategories: PublicCategoryResponse[],
   products: Producto[],
+  companyId?: number | string | null,
 ): Categoria[] {
   const mapped = backendCategories.map(mapCategory);
 
   if (mapped.length > 0) {
-    return sortCategoriesForDisplay(mapped);
+    return sortCategoriesForDisplay(mapped, { companyId });
   }
 
-  return sortCategoriesForDisplay(mergeCategories(products.map(productToCategory)));
+  return sortCategoriesForDisplay(mergeCategories(products.map(productToCategory)), { companyId });
 }
 
 function mergeCategories(...categoryGroups: Array<Array<Categoria | null>>): Categoria[] {
@@ -361,7 +385,7 @@ function mapCompany(payload: PublicCompanyResponse | undefined, tenantSlug: stri
   const logoUrl = payload.logoUrl?.trim() || payload.logo_url?.trim() || "";
 
   return {
-    id: payload.id ?? 0,
+    id: toPositiveNumber(payload.id ?? payload.empresa_id ?? payload.empresaID) ?? 0,
     nombre: payload.nombre?.trim() || prettifyTenantSlug(tenantSlug),
     logo: logoUrl,
     logoUrl,

@@ -3,7 +3,7 @@ export interface CountryCodeOption {
   name: string;
 }
 
-export const countryCodes: CountryCodeOption[] = [
+const rawCountryCodes: CountryCodeOption[] = [
   { code: "+1", name: "Estados Unidos" },
   { code: "+1", name: "Canada" },
   { code: "+52", name: "Mexico" },
@@ -144,3 +144,7 @@ export const countryCodes: CountryCodeOption[] = [
   { code: "+998", name: "Uzbekistan" },
   { code: "+374", name: "Armenia" },
 ];
+
+export const countryCodes: CountryCodeOption[] = [...rawCountryCodes].sort((a, b) =>
+  a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+);

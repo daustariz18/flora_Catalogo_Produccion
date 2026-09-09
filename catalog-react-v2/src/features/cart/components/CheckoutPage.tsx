@@ -36,6 +36,7 @@ type TransferAccount = {
 };
 const SIGNATURE_PLACEHOLDER = "Anónimo";
 const TRANSFER_ACCOUNTS_COMPANY_ID = 2;
+const TRANSFER_ONLY_COMPANY_ID = 5;
 const COMPANY_TRANSFER_ACCOUNTS: TransferAccount[] = [
   { id: "nequi", label: "Nequi", number: "3001720582" },
   { id: "daviplata", label: "Daviplata", number: "3128896624" },
@@ -113,6 +114,7 @@ const DEFAULT_PAYMENT_OPTIONS: CheckoutPaymentOption[] = [
     subtitle: "Enviar resumen del pedido",
   },
 ];
+const TRANSFER_ONLY_PAYMENT_OPTIONS: CheckoutPaymentOption[] = [DEFAULT_PAYMENT_OPTIONS[0]];
 
 function mapPublicPaymentMethods(methods: PublicPaymentMethod[]): CheckoutPaymentOption[] {
   const mapped: CheckoutPaymentOption[] = [];
@@ -198,6 +200,25 @@ function withTransferAccountFlow(
           ],
         }
       : option,
+  );
+}
+
+export function getCheckoutPaymentOptions(
+  empresaId: number | null,
+  isFlora: boolean,
+  paymentMethods: PublicPaymentMethod[],
+): CheckoutPaymentOption[] {
+  if (empresaId === TRANSFER_ONLY_COMPANY_ID) {
+    return TRANSFER_ONLY_PAYMENT_OPTIONS;
+  }
+
+  if (isFlora) {
+    return DEFAULT_PAYMENT_OPTIONS;
+  }
+
+  return withTransferAccountFlow(
+    mapPublicPaymentMethods(paymentMethods),
+    getTransferAccountsForCompany(empresaId),
   );
 }
 
@@ -1333,10 +1354,7 @@ export function CheckoutPage() {
         const nextEmpresaId = getEmpresaId(catalog.empresa);
         const nextEmpresaSlug = getEmpresaSlug(catalog.empresa);
         const nextEmpresaCelular = getEmpresaCelular(catalog.empresa);
-        const transferAccounts = getTransferAccountsForCompany(nextEmpresaId);
-        const mappedOptions = isFlora
-          ? DEFAULT_PAYMENT_OPTIONS
-          : withTransferAccountFlow(mapPublicPaymentMethods(catalog.payment_methods ?? []), transferAccounts);
+        const mappedOptions = getCheckoutPaymentOptions(nextEmpresaId, isFlora, catalog.payment_methods ?? []);
 
         if (!cancelled) {
           setEmpresaId(nextEmpresaId);
@@ -1508,7 +1526,8 @@ export function CheckoutPage() {
         return;
       }
 
-      const effectivePaymentMethod: PaymentMethod = isFlora ? "efectivo" : paymentMethod;
+      const effectivePaymentMethod: PaymentMethod =
+        empresaId === TRANSFER_ONLY_COMPANY_ID ? "transferencia" : isFlora ? "efectivo" : paymentMethod;
       const toOrderItem = (producto: CartItem) => ({
         productoID: producto.id_producto ?? producto.id,
         cantidad: producto.cantidad,

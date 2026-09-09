@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PedidoState } from "../store/cartStore";
-import { isDeliveryStepComplete, isMessageStepComplete } from "./CheckoutPage";
+import { getCheckoutPaymentOptions, isDeliveryStepComplete, isMessageStepComplete } from "./CheckoutPage";
 
 function buildBasePedidoState(): PedidoState["entrega"] {
   return {
@@ -85,5 +85,18 @@ describe("isMessageStepComplete", () => {
         firma: "Anónimo",
       }),
     ).toBe(true);
+  });
+});
+
+describe("getCheckoutPaymentOptions", () => {
+  it("solo permite transferencia para la empresa 5", () => {
+    const options = getCheckoutPaymentOptions(5, false, [
+      { value: "transferencia", title: "Transferencia" },
+      { value: "efectivo", title: "Efectivo" },
+      { value: "wompi", title: "Wompi" },
+    ]);
+
+    expect(options).toHaveLength(1);
+    expect(options[0].value).toBe("transferencia");
   });
 });

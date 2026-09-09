@@ -16,4 +16,12 @@ describe("countryCodes", () => {
       expect(entry.name.trim()).not.toBe("");
     }
   });
+
+  it("sorts country code entries alphabetically by country name", () => {
+    const sortedNames = countryCodes
+      .map((entry) => entry.name)
+      .toSorted((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+
+    expect(countryCodes.map((entry) => entry.name)).toEqual(sortedNames);
+  });
 });

@@ -82,8 +82,9 @@ export function useCompanyData(tenantSlug: string): UseCompanyDataResult {
           return;
         }
 
-        const mappedProducts = sortProductsForDisplay(mapPublicProducts(payload, tenantSlug));
-        const mappedCategories = sortCategoriesForDisplay(mapCategories(payload, mappedProducts));
+        const companyId = resolveCompanyId(payload);
+        const mappedProducts = sortProductsForDisplay(mapPublicProducts(payload, tenantSlug), { companyId });
+        const mappedCategories = sortCategoriesForDisplay(mapCategories(payload, mappedProducts), { companyId });
 
         setProducts(mappedProducts);
         setCategories(mappedCategories);
@@ -146,7 +147,7 @@ function toCompany(payload: PublicCatalogoResponse, tenantSlug: string): Empresa
     getDefaultTenantLogo(tenantSlug);
 
   return {
-    id: 0,
+    id: resolveCompanyId(payload) ?? 0,
     nombre: payload.empresa?.nombre?.trim() || tenantSlug || "Catalogo",
     logo: logoCandidate,
     colorPrimario: payload.empresa?.colorPrimario || payload.empresa?.color_primario || DEFAULT_COMPANY_COLOR,
@@ -245,4 +246,8 @@ function normalizeCatalogOrder(value: unknown): number | null {
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveCompanyId(payload: PublicCatalogoResponse): number | null {
+  return toPositiveNumber(payload.empresa?.id ?? payload.empresa?.empresa_id ?? payload.empresa?.empresaID);
 }

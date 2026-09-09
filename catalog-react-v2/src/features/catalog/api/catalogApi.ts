@@ -67,11 +67,12 @@ export async function fetchCatalogByEmpresa(empresaID: string): Promise<CatalogR
   }
 
   const payload = await getCatalogoPublico(empresaID);
-  const products = sortProductsForDisplay(mapPublicProducts(payload, empresaID));
+  const companyId = resolveCompanyId(payload, empresaID);
+  const products = sortProductsForDisplay(mapPublicProducts(payload, empresaID), { companyId });
 
   return {
     empresa: {
-      id: 0,
+      id: companyId ?? 0,
       nombre: payload.empresa?.nombre?.trim() || empresaID || "Catalogo",
       logo:
         payload.empresa?.logoUrl?.trim() ||
@@ -81,7 +82,7 @@ export async function fetchCatalogByEmpresa(empresaID: string): Promise<CatalogR
         getDefaultTenantLogo(empresaID),
       colorPrimario: payload.empresa?.colorPrimario || payload.empresa?.color_primario || DEFAULT_COMPANY_COLOR,
     },
-    categorias: sortCategoriesForDisplay(mapCategories(payload, products)),
+    categorias: sortCategoriesForDisplay(mapCategories(payload, products), { companyId }),
     productos: products,
   };
 }
@@ -200,4 +201,8 @@ function normalizeCatalogOrder(value: unknown): number | null {
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveCompanyId(payload: PublicCatalogoResponse, fallback: string): number | null {
+  return toPositiveNumber(payload.empresa?.id ?? payload.empresa?.empresa_id ?? payload.empresa?.empresaID) ?? toPositiveNumber(fallback);
 }

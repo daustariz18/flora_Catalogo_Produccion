@@ -3,3 +3,5 @@ catalog-react/
 .env
 .log
 .zip
+
+# Local dependency and build artifacts stay outside the repository.

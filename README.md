@@ -2,6 +2,8 @@
 
 Repositorio principal del proyecto **Catalogo Web PetalOps**.
 
+Sincronizado con el workspace de produccion del catalogo.
+
 ## Estructura del repositorio
 
 - `catalog-react-v2/`: Frontend principal (React + Vite + TypeScript).
@@ -39,4 +41,3 @@ Este repositorio **no sube** entorno virtual local ni secretos:
 ## Git remoto
 
 - `origin`: `https://github.com/joindatasolutions-lab/Catalogo_Web_Petalops.git`
-

@@ -29,8 +29,8 @@ jobs:
       - name: Sync build via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
+          server: ftp.joindata.com.co
+          username: catalogo@joindata.com.co
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21

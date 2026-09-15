@@ -7,22 +7,33 @@ on:
 
 jobs:
   web-deploy:
-    name: 🚀 Deploying to cPanel
+    name: Deploying to cPanel
     runs-on: ubuntu-latest
     steps:
-      - name: 🛑 Get latest code from main
+      - name: Get latest code from main
         uses: actions/checkout@v4
 
-      - name: 📂 Sync files via FTP
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: catalog-react-v2/package-lock.json
+
+      - name: Build catalog
+        working-directory: catalog-react-v2
+        run: |
+          npm ci
+          npm run build
+
+      - name: Sync build via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          
-          # Ruta exacta en tu cPanel según vimos en tu directorio principal
+          local-dir: catalog-react-v2/dist/
           server-dir: /public_html/catalogo-web.joindata.com.co/
-          
           exclude: |
             **/.git*
             **/.git*/**

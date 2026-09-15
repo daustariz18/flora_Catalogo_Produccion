@@ -20,8 +20,9 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           
-          # Ruta exacta en tu cPanel según vimos en tu directorio principal
-          server-dir: /public_html/catalogo-web.joindata.com.co/
+          # Como la cuenta FTP ya apunta directamente a la carpeta del catalogo, 
+          # solo usamos una barra inclinada (/) para indicar la raíz de este usuario FTP.
+          server-dir: /
           
           exclude: |
             **/.git*

@@ -16,7 +16,7 @@ import { CartItemsList } from "./CartItemsList";
 import { useCartStore } from "../store/cartStore";
 import type { AvailableBarrio, CartItem, PedidoState } from "../store/cartStore";
 import { usePublicBarrios } from "../../catalog/hooks/usePublicBarrios";
-import { getCatalogoPublico, type PublicPaymentMethod } from "../../catalog/api/publicCatalogApi";
+import { getCatalogoPublico, type PublicPaymentMethod, type PublicTransferAccount } from "../../catalog/api/publicCatalogApi";
 
 type WizardStep = 1 | 2 | 3 | 4;
 type PaymentMethod = "wompi" | "transferencia" | "efectivo";
@@ -35,12 +35,7 @@ type TransferAccount = {
   number: string;
 };
 const SIGNATURE_PLACEHOLDER = "Anónimo";
-const TRANSFER_ACCOUNTS_COMPANY_ID = 2;
 const TRANSFER_ONLY_COMPANY_ID = 5;
-const COMPANY_TRANSFER_ACCOUNTS: TransferAccount[] = [
-  { id: "nequi", label: "Nequi", number: "3001720582" },
-  { id: "daviplata", label: "Daviplata", number: "3128896624" },
-];
 const WOMPI_CHECKOUT_URL =
   (import.meta.env.VITE_WOMPI_CHECKOUT_URL as string | undefined)?.trim() || "https://checkout.wompi.co/p/";
 
@@ -167,8 +162,14 @@ function getEmpresaCelular(
   return firstNonEmpty(empresa?.celular, empresa?.telefono_celular, empresa?.cell, empresa?.phone, empresa?.telefono);
 }
 
-function getTransferAccountsForCompany(empresaId: number | null): TransferAccount[] {
-  return empresaId === TRANSFER_ACCOUNTS_COMPANY_ID ? COMPANY_TRANSFER_ACCOUNTS : [];
+function mapPublicTransferAccounts(accounts: PublicTransferAccount[]): TransferAccount[] {
+  return accounts
+    .map((account) => ({
+      id: String(account.id ?? account.cuenta ?? ""),
+      label: account.cuenta?.trim() ?? "",
+      number: (account.numero_cuenta ?? account.numeroCuenta ?? "")?.trim() ?? "",
+    }))
+    .filter((account) => account.label.length > 0 && account.number.length > 0);
 }
 
 function withTransferAccountFlow(
@@ -191,11 +192,11 @@ function withTransferAccountFlow(
       ? {
           ...option,
           title: option.title || "Transferencia",
-          caption: "Paga por Nequi o Daviplata y envía el comprobante por WhatsApp",
+          caption: "Transfiere a la cuenta indicada y envía el comprobante por WhatsApp",
           cta: "FINALIZAR Y ENVIAR COMPROBANTE",
           subtitle: "Te abriremos WhatsApp al finalizar",
           confirmationBullets: [
-            "Elige Nequi o Daviplata y transfiere el total",
+            "Transfiere el total exacto a la cuenta indicada",
             "Al finalizar podrás enviar el comprobante por WhatsApp",
           ],
         }
@@ -207,6 +208,7 @@ export function getCheckoutPaymentOptions(
   empresaId: number | null,
   isFlora: boolean,
   paymentMethods: PublicPaymentMethod[],
+  transferAccounts: TransferAccount[] = [],
 ): CheckoutPaymentOption[] {
   if (empresaId === TRANSFER_ONLY_COMPANY_ID) {
     return TRANSFER_ONLY_PAYMENT_OPTIONS;
@@ -216,10 +218,7 @@ export function getCheckoutPaymentOptions(
     return DEFAULT_PAYMENT_OPTIONS;
   }
 
-  return withTransferAccountFlow(
-    mapPublicPaymentMethods(paymentMethods),
-    getTransferAccountsForCompany(empresaId),
-  );
+  return withTransferAccountFlow(mapPublicPaymentMethods(paymentMethods), transferAccounts);
 }
 
 function normalizePaymentMethod(value: string | null | undefined): PaymentMethod | null {
@@ -1287,6 +1286,7 @@ export function CheckoutPage() {
   const [empresaId, setEmpresaId] = useState<number | null>(null);
   const [empresaSlug, setEmpresaSlug] = useState<string | null>(null);
   const [empresaCelular, setEmpresaCelular] = useState<string | null>(null);
+  const [transferAccounts, setTransferAccounts] = useState<TransferAccount[]>([]);
   const [customerLookupStatus, setCustomerLookupStatus] = useState<"idle" | "loading" | "found" | "not_found" | "error">(
     "idle",
   );
@@ -1346,6 +1346,7 @@ export function CheckoutPage() {
         setEmpresaId(null);
         setEmpresaSlug(null);
         setEmpresaCelular(null);
+        setTransferAccounts([]);
         return;
       }
 
@@ -1354,12 +1355,19 @@ export function CheckoutPage() {
         const nextEmpresaId = getEmpresaId(catalog.empresa);
         const nextEmpresaSlug = getEmpresaSlug(catalog.empresa);
         const nextEmpresaCelular = getEmpresaCelular(catalog.empresa);
-        const mappedOptions = getCheckoutPaymentOptions(nextEmpresaId, isFlora, catalog.payment_methods ?? []);
+        const nextTransferAccounts = mapPublicTransferAccounts(catalog.cuentas_transferencia ?? []);
+        const mappedOptions = getCheckoutPaymentOptions(
+          nextEmpresaId,
+          isFlora,
+          catalog.payment_methods ?? [],
+          nextTransferAccounts,
+        );
 
         if (!cancelled) {
           setEmpresaId(nextEmpresaId);
           setEmpresaSlug(nextEmpresaSlug);
           setEmpresaCelular(nextEmpresaCelular);
+          setTransferAccounts(nextTransferAccounts);
           setPaymentOptions(mappedOptions);
           if (!mappedOptions.some((option) => option.value === paymentMethod)) {
             setPaymentMethod(mappedOptions[0]?.value ?? "transferencia");
@@ -1370,6 +1378,7 @@ export function CheckoutPage() {
           setEmpresaId(null);
           setEmpresaSlug(null);
           setEmpresaCelular(null);
+          setTransferAccounts([]);
           setPaymentOptions(DEFAULT_PAYMENT_OPTIONS);
         }
       }
@@ -1702,8 +1711,6 @@ export function CheckoutPage() {
       setIsSubmitting(false);
     }
   }
-
-  const transferAccounts = getTransferAccountsForCompany(empresaId);
 
   if (!resolvedTenantSlug) {
     return (

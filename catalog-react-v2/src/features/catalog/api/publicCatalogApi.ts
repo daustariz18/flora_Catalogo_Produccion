@@ -98,6 +98,13 @@ export type PublicPaymentMethod = {
   confirmationBullets?: string[] | null;
 };
 
+export type PublicTransferAccount = {
+  id?: number | string | null;
+  cuenta?: string | null;
+  numero_cuenta?: string | null;
+  numeroCuenta?: string | null;
+};
+
 export type PublicCatalogoResponse = {
   empresa: PublicEmpresa | null;
   categorias: PublicCategoria[];
@@ -105,6 +112,7 @@ export type PublicCatalogoResponse = {
   catalogo?: PublicProducto[];
   barrios: PublicBarrio[];
   payment_methods?: PublicPaymentMethod[];
+  cuentas_transferencia?: PublicTransferAccount[];
 };
 
 type PublicCatalogRawResponse =
@@ -130,6 +138,7 @@ type PublicCatalogRawResponse =
         | null;
       payment_methods?: PublicPaymentMethod[] | null;
       paymentMethods?: PublicPaymentMethod[] | null;
+      cuentas_transferencia?: PublicTransferAccount[] | null;
     };
 
 export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCatalogoResponse> {
@@ -157,6 +166,7 @@ export async function getCatalogoPublico(tenantSlug: string): Promise<PublicCata
     productos,
     barrios,
     payment_methods: payload.payment_methods ?? payload.paymentMethods ?? [],
+    cuentas_transferencia: payload.cuentas_transferencia ?? [],
   };
 }
 

@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import type { Producto } from "../../../shared/types/catalog";
 import { useCartStore } from "../../cart/store/cartStore";
 import { CartSummaryBar } from "../../cart/components/CartSummaryBar";
-import { CategoryFilter } from "../components/CategoryFilter";
+import { CategoryGrid } from "../components/CategoryGrid";
 import { Header } from "../components/Header";
 import { ProductDetailModal } from "../components/ProductDetailModal";
 import { ProductGrid, type CatalogViewMode, type ProductSortMode } from "../components/ProductGrid";
@@ -12,6 +12,7 @@ import { ViewModeToggle } from "../components/ViewModeToggle";
 import { usePublicBarrios } from "../hooks/usePublicBarrios";
 import { usePublicCatalog } from "../hooks/usePublicCatalog";
 import { resolveTenantSlug, storeTenantSlug } from "../../../shared/utils/tenantSlug";
+import type { CategoriaResumen } from "../../../shared/types/catalog";
 
 const CATALOG_VIEW_MODE_KEY = "petalops.catalog.viewMode";
 const CATALOG_VIEW_MODES: CatalogViewMode[] = ["grid", "list"];
@@ -38,6 +39,7 @@ export function CatalogPage() {
   const {
     company,
     categories,
+    categorySummaries,
     products,
     hasMore,
     isLoadingProducts,
@@ -54,6 +56,10 @@ export function CatalogPage() {
     selectedCategory !== null && !categories.some((category) => category.id === selectedCategory)
       ? null
       : selectedCategory;
+  const selectedCategoryName =
+    effectiveSelectedCategory !== null
+      ? categories.find((category) => category.id === effectiveSelectedCategory)?.nombre
+      : null;
 
   useLayoutEffect(() => {
     setActiveTenant(activeTenant);
@@ -96,7 +102,12 @@ export function CatalogPage() {
     : effectiveSelectedCategory !== null
       ? "No encontramos productos para esta seleccion."
       : "Todavia no hay productos publicados para este catalogo.";
+  const collectionEmptyMessage = isSearchActive
+    ? "No encontramos colecciones para esta busqueda."
+    : "Todavia no hay colecciones publicadas para este catalogo.";
   const showProductLoading = isLoadingProducts && products.length === 0;
+  const filteredCategorySummaries = filterCategorySummaries(categorySummaries, normalizedSearchQuery);
+  const showCollections = effectiveSelectedCategory === null;
 
   return (
     <main style={{ "--brand-color": companyColor } as CSSProperties} className="catalog-page">
@@ -119,7 +130,7 @@ export function CatalogPage() {
               className="catalog-search-input"
               type="text"
               value={searchQuery}
-              placeholder="Nombre, codigo o categoria"
+              placeholder="Buscar flores o arreglos"
               aria-label="Buscar productos"
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -136,34 +147,48 @@ export function CatalogPage() {
           </div>
         </div>
 
-        <div className="catalog-toolbar">
-          <CategoryFilter
-            categories={categories}
-            selectedCategory={effectiveSelectedCategory}
-            onChange={setSelectedCategory}
-            companyColor={companyColor}
-          />
-          <div className="catalog-toolbar-actions">
-            <ProductSortDropdown value={sortMode} onChange={setSortMode} />
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        {showCollections ? (
+          <div className="catalog-collection-stack">
+            <div className="catalog-section-head">
+              <h2>Explora por coleccion</h2>
+            </div>
+            <CategoryGrid
+              categories={filteredCategorySummaries}
+              companyColor={companyColor}
+              emptyMessage={collectionEmptyMessage}
+              onSelectCategory={setSelectedCategory}
+            />
           </div>
-        </div>
-
-        {showProductLoading ? (
+        ) : showProductLoading ? (
           <section className="catalog-empty-shell" aria-live="polite">
             <p className="empty-state">{isSearchActive ? "Buscando productos..." : "Cargando productos..."}</p>
           </section>
         ) : (
-          <ProductGrid
-            products={products}
-            companyColor={companyColor}
-            onOpenDetail={setDetailProduct}
-            emptyMessage={emptyMessage}
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-            onLoadMore={loadMore}
-            viewMode={viewMode}
-          />
+          <div className="catalog-products-view">
+            <div className="catalog-products-head">
+              <button type="button" className="catalog-back-button" onClick={() => setSelectedCategory(null)}>
+                Volver a colecciones
+              </button>
+              <div className="catalog-products-title">
+                <p>Arreglos de</p>
+                <h2>{selectedCategoryName ?? "Coleccion"}</h2>
+              </div>
+              <div className="catalog-toolbar-actions">
+                <ProductSortDropdown value={sortMode} onChange={setSortMode} />
+                <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              </div>
+            </div>
+            <ProductGrid
+              products={products}
+              companyColor={companyColor}
+              onOpenDetail={setDetailProduct}
+              emptyMessage={emptyMessage}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMore}
+              viewMode={viewMode}
+            />
+          </div>
         )}
       </section>
 
@@ -186,4 +211,34 @@ export function CatalogPage() {
       <CartSummaryBar />
     </main>
   );
+}
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-CO")
+    .trim();
+}
+
+function filterCategorySummaries(summaries: CategoriaResumen[], searchQuery: string): CategoriaResumen[] {
+  const normalizedQuery = normalizeSearchValue(searchQuery);
+
+  if (!normalizedQuery) {
+    return summaries;
+  }
+
+  return summaries.filter((summary) => {
+    const categoryName = normalizeSearchValue(summary.category.nombre);
+    const hasMatchingProduct = summary.products.some((product) => {
+      const productName = normalizeSearchValue(product.nombre);
+      const productCode = normalizeSearchValue(
+        product.codigo_catalogo ?? product.codigo_producto ?? product.codigoProduct ?? "",
+      );
+
+      return productName.includes(normalizedQuery) || productCode.includes(normalizedQuery);
+    });
+
+    return categoryName.includes(normalizedQuery) || hasMatchingProduct;
+  });
 }

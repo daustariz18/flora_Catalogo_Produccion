@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import type { Categoria, Empresa, Producto } from "../../../shared/types/catalog";
+import type { Categoria, CategoriaResumen, Empresa, Producto } from "../../../shared/types/catalog";
 import type { ProductSortMode } from "../components/ProductGrid";
 import { resolveProductImageUrl } from "../utils/cloudfront";
 import {
@@ -17,14 +17,26 @@ import {
 } from "../api/publicProductsApi";
 import { fetchPublicCompany, type PublicCompanyResponse } from "../api/publicCompanyApi";
 import { fetchPublicCategories, type PublicCategoryResponse } from "../api/publicCategoriesApi";
+import {
+  applyCompanyTheme,
+  DEFAULT_COMPANY_BG,
+  DEFAULT_COMPANY_BG_SOFT,
+  DEFAULT_COMPANY_BORDER,
+  DEFAULT_COMPANY_COLOR,
+  DEFAULT_COMPANY_COLOR_SECONDARY,
+  DEFAULT_COMPANY_FONT_FAMILY,
+  DEFAULT_COMPANY_FONT_SIZE,
+  DEFAULT_COMPANY_TEXT,
+  DEFAULT_COMPANY_TEXT_SOFT,
+} from "../../../shared/theme/companyTheme";
 
 const DEFAULT_LIMIT = 12;
 const SORTED_LIMIT = 100;
-const DEFAULT_COMPANY_COLOR = "#d94b8a";
 
 interface UsePublicCatalogResult {
   company: Empresa;
   categories: Categoria[];
+  categorySummaries: CategoriaResumen[];
   products: Producto[];
   total: number;
   hasMore: boolean;
@@ -104,9 +116,26 @@ export function usePublicCatalog(
     [companyQuery.data, normalizedTenant],
   );
 
+  useEffect(() => {
+    applyCompanyTheme(company);
+  }, [company]);
+
   const categories = useMemo(() => {
     return resolvePublicCategories(categoriesQuery.data ?? [], allProducts, company.id);
   }, [allProducts, categoriesQuery.data, company.id]);
+
+  const categorySummaries = useMemo(() => {
+    return categories.map((category) => {
+      const categoryProducts = allProducts.filter((product) => matchesSelectedCategory(product, category.id, categories));
+
+      return {
+        category,
+        coverProduct: selectCategoryCoverProduct(category, categoryProducts),
+        products: categoryProducts,
+        productCount: categoryProducts.length,
+      };
+    });
+  }, [allProducts, categories]);
 
   const filteredProducts = useMemo(() => {
     return allProducts.filter(
@@ -143,6 +172,7 @@ export function usePublicCatalog(
   return {
     company,
     categories,
+    categorySummaries,
     products,
     total,
     hasMore: shouldLoadAllProducts ? products.length < allSortedProducts.length : Boolean(productsQuery.hasNextPage),
@@ -200,6 +230,65 @@ function isAdditionalProduct(product: Producto): boolean {
 
 function isPersonalizedProduct(product: Producto): boolean {
   return normalizeSortName(product.categoriaNombre ?? "").includes("personaliz");
+}
+
+function isLoveAndFriendshipCategory(category: Categoria): boolean {
+  const normalizedName = normalizeSortName(category.nombre);
+
+  return normalizedName.includes("amor") && normalizedName.includes("amistad");
+}
+
+function selectCategoryCoverProduct(category: Categoria, products: Producto[]): Producto | null {
+  if (!products.length) {
+    return null;
+  }
+
+  if (!isLoveAndFriendshipCategory(category)) {
+    return products[0];
+  }
+
+  return [...products].sort((a, b) => scoreRedLoveCoverProduct(b) - scoreRedLoveCoverProduct(a))[0] ?? products[0];
+}
+
+function scoreRedLoveCoverProduct(product: Producto): number {
+  const value = normalizeSortName(
+    [
+      product.nombre,
+      product.codigo_catalogo,
+      product.codigo_producto,
+      product.codigoProduct,
+      product.imagen,
+      product.imagen_url,
+      product.imagen_sm,
+      product.imagen_md,
+      product.imagen_lg,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  let score = 0;
+
+  if (value.includes("rojo") || value.includes("roja") || value.includes("red")) {
+    score += 6;
+  }
+
+  if (value.includes("rosa") || value.includes("rosas")) {
+    score += 3;
+  }
+
+  if (value.includes("corazon") || value.includes("heart")) {
+    score += 5;
+  }
+
+  if (value.includes("amor")) {
+    score += 2;
+  }
+
+  if (value.includes("amistad")) {
+    score += 1;
+  }
+
+  return score;
 }
 
 function normalizeSortCode(product: Producto): string {
@@ -374,6 +463,14 @@ function buildFallbackCompany(tenantSlug: string): Empresa {
     logo: "",
     logoUrl: "",
     colorPrimario: DEFAULT_COMPANY_COLOR,
+    colorSecundario: DEFAULT_COMPANY_COLOR_SECONDARY,
+    colorFondo: DEFAULT_COMPANY_BG,
+    colorFondoSuave: DEFAULT_COMPANY_BG_SOFT,
+    colorTexto: DEFAULT_COMPANY_TEXT,
+    colorTextoSuave: DEFAULT_COMPANY_TEXT_SOFT,
+    colorBorde: DEFAULT_COMPANY_BORDER,
+    fuenteFamilia: DEFAULT_COMPANY_FONT_FAMILY,
+    fuenteTamanoBase: DEFAULT_COMPANY_FONT_SIZE,
   };
 }
 
@@ -390,6 +487,14 @@ function mapCompany(payload: PublicCompanyResponse | undefined, tenantSlug: stri
     logo: logoUrl,
     logoUrl,
     colorPrimario: payload.colorPrimario || payload.color_primario || DEFAULT_COMPANY_COLOR,
+    colorSecundario: payload.colorSecundario || payload.color_secundario || DEFAULT_COMPANY_COLOR_SECONDARY,
+    colorFondo: payload.colorFondo || payload.color_fondo || DEFAULT_COMPANY_BG,
+    colorFondoSuave: payload.colorFondoSuave || payload.color_fondo_suave || DEFAULT_COMPANY_BG_SOFT,
+    colorTexto: payload.colorTexto || payload.color_texto || DEFAULT_COMPANY_TEXT,
+    colorTextoSuave: payload.colorTextoSuave || payload.color_texto_suave || DEFAULT_COMPANY_TEXT_SOFT,
+    colorBorde: payload.colorBorde || payload.color_borde || DEFAULT_COMPANY_BORDER,
+    fuenteFamilia: payload.fuenteFamilia || payload.fuente_familia || DEFAULT_COMPANY_FONT_FAMILY,
+    fuenteTamanoBase: payload.fuenteTamanoBase || payload.fuente_tamano_base || DEFAULT_COMPANY_FONT_SIZE,
   };
 }
 

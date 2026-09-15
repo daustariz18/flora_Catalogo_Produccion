@@ -4,8 +4,12 @@ import { CartPage } from "../../features/cart/components/CartPage";
 import { CheckoutPage } from "../../features/cart/components/CheckoutPage";
 import { OrderSuccessPage } from "../../features/cart/components/OrderSuccessPage";
 import { LoginPage } from "../../pages/LoginPage";
+import { useTenantThemeSync } from "../../shared/hooks/useTenantThemeSync";
 
 export function AppRouter() {
+  // Mantiene el color/fuente del tenant aplicados en cualquier pagina (no solo catalogo).
+  useTenantThemeSync();
+
   return (
     <Routes>
       <Route path="/catalogo" element={<CatalogPage />} />

@@ -4,12 +4,27 @@ export interface Empresa {
   logo: string;
   logoUrl?: string;
   colorPrimario: string;
+  colorSecundario?: string;
+  colorFondo?: string;
+  colorFondoSuave?: string;
+  colorTexto?: string;
+  colorTextoSuave?: string;
+  colorBorde?: string;
+  fuenteFamilia?: string;
+  fuenteTamanoBase?: string;
 }
 
 export interface Categoria {
   id: number;
   nombre: string;
   orden_catalogo?: number | null;
+}
+
+export interface CategoriaResumen {
+  category: Categoria;
+  coverProduct: Producto | null;
+  products: Producto[];
+  productCount: number;
 }
 
 export interface Producto {

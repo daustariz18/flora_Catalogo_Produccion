@@ -13,6 +13,7 @@
   --font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   --font-size-base: 16px;
   --checkout-bar-height: 120px;
+  --catalog-content-max: 1504px;
 }
 
 html {
@@ -49,7 +50,7 @@ body {
 }
 
 .company-header-inner {
-  max-width: 1080px;
+  max-width: var(--catalog-content-max);
   margin: 0 auto;
   padding: 0.75rem 1rem;
   display: flex;
@@ -110,7 +111,7 @@ body {
 }
 
 .catalog-content {
-  max-width: 1080px;
+  max-width: var(--catalog-content-max);
   margin: 0 auto;
   padding: 1rem 1rem 6.5rem;
 }
@@ -901,7 +902,7 @@ body {
 
 .bottom-checkout-inner {
   width: 100%;
-  max-width: 1080px;
+  max-width: var(--catalog-content-max);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -2979,6 +2980,26 @@ body {
 
   .category-card-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .product-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .category-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .product-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .category-card-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 

@@ -10,6 +10,10 @@ describe("countryCodes", () => {
     expect(countryCodes).toContainEqual({ code: "+7", name: "Kazajistan" });
   });
 
+  it("excludes Antigua y Barbuda so the +1 selector keeps Estados Unidos available", () => {
+    expect(countryCodes).not.toContainEqual({ code: "+1", name: "Antigua y Barbuda" });
+  });
+
   it("keeps all country code entries populated", () => {
     for (const entry of countryCodes) {
       expect(entry.code.trim()).not.toBe("");

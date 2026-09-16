@@ -68,7 +68,6 @@ const rawCountryCodes: CountryCodeOption[] = [
   { code: "+1", name: "Santa Lucia" },
   { code: "+1", name: "Granada" },
   { code: "+1", name: "San Vicente y las Granadinas" },
-  { code: "+1", name: "Antigua y Barbuda" },
   { code: "+1", name: "San Cristobal y Nieves" },
   { code: "+1", name: "Samoa Americana" },
   { code: "+1", name: "Guam" },
